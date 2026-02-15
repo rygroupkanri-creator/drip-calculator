@@ -1,0 +1,11 @@
+fix: resolve ESLint errors in Metronome component
+
+- Replace 'any' type with proper TypeScript intersection type for webkitAudioContext
+- Wrap playBeat function with useCallback to satisfy react-hooks/exhaustive-deps
+- Update useEffect dependency array to include playBeat
+
+This fixes the following ESLint errors that were causing Vercel deployment to fail:
+1. @typescript-eslint/no-explicit-any (line 23)
+2. react-hooks/exhaustive-deps (line 103)
+
+The metronome functionality remains unchanged and all features work as expected.

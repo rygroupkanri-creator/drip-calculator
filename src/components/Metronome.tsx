@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Volume2, VolumeX, Play, Pause } from 'lucide-react'
 
 interface MetronomeProps {
@@ -20,7 +20,8 @@ export default function Metronome({ intervalMs, isRunning, onToggle }: Metronome
   // Initialize Web Audio Context
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
+      const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      audioContextRef.current = new AudioContextClass()
     }
     return () => {
       if (audioContextRef.current) {
@@ -30,7 +31,7 @@ export default function Metronome({ intervalMs, isRunning, onToggle }: Metronome
   }, [])
 
   // Play beat sound using Web Audio API for precision
-  const playBeat = () => {
+  const playBeat = useCallback(() => {
     if (!audioContextRef.current || !isSoundEnabled) return
 
     const context = audioContextRef.current
@@ -51,7 +52,7 @@ export default function Metronome({ intervalMs, isRunning, onToggle }: Metronome
 
     oscillator.start(context.currentTime)
     oscillator.stop(context.currentTime + 0.1)
-  }
+  }, [isSoundEnabled])
 
   // Trigger visual pulse
   const triggerPulse = () => {
@@ -100,7 +101,7 @@ export default function Metronome({ intervalMs, isRunning, onToggle }: Metronome
         schedulerIdRef.current = null
       }
     }
-  }, [isRunning, intervalMs, isSoundEnabled])
+  }, [isRunning, intervalMs, playBeat])
 
   return (
     <div className="bg-white rounded-2xl shadow-lg p-6 space-y-4">
