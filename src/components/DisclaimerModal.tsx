@@ -39,16 +39,16 @@ export default function DisclaimerModal({ onAccept }: DisclaimerModalProps) {
 
         <div className="text-center space-y-2">
           <h2 className="text-2xl font-bold text-gray-900">
-            Important Disclaimer
+            ご利用前の確認
           </h2>
           <p className="text-gray-600 leading-relaxed">
-            This drip rate calculator is a <strong>support tool</strong> designed to assist healthcare professionals.
+            本アプリは滴下計算を<strong>補助するためのツール</strong>です。
           </p>
         </div>
 
         <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded">
-          <p className="text-sm text-amber-900">
-            <strong>Final verification must always be done visually by a qualified professional.</strong> This tool does not replace clinical judgment or proper medical procedures.
+          <p className="text-sm text-amber-900 leading-relaxed">
+            <strong>最終的な設定は、必ず医療従事者による目視と確認で行ってください。</strong>計算結果によって生じた事象について、本アプリは責任を負いかねます。
           </p>
         </div>
 
@@ -56,11 +56,11 @@ export default function DisclaimerModal({ onAccept }: DisclaimerModalProps) {
           onClick={handleAccept}
           className="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-4 px-6 rounded-xl transition-colors duration-200 tap-highlight-transparent active:scale-95 transform"
         >
-          I Understand & Agree
+          承諾して利用を開始する
         </button>
 
         <p className="text-xs text-gray-500 text-center">
-          By clicking "I Understand & Agree", you acknowledge that you have read and understood this disclaimer.
+          ボタンをクリックすることで、上記の内容を理解し承諾したものとみなします。
         </p>
       </div>
     </div>

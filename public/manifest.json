@@ -1,7 +1,8 @@
 {
-  "name": "IV Drip Rate Calculator",
-  "short_name": "Drip Calc",
-  "description": "High-precision IV drip rate calculator with metronome for healthcare professionals",
+  "name": "点滴計算機",
+  "short_name": "点滴計算",
+  "description": "看護師のための高精度点滴滴下計算・リズムガイドツール",
+  "lang": "ja",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

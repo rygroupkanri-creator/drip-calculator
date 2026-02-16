@@ -77,11 +77,11 @@ export default function Calculator() {
             <div className="flex items-center justify-center gap-3">
               <Droplets className="w-8 h-8 text-primary-600" />
               <h1 className="text-3xl font-bold text-gray-900">
-                IV Drip Rate Calculator
+                点滴滴下計算機
               </h1>
             </div>
             <p className="text-gray-600">
-              Calculate precise drop rates with metronome assistance
+              高精度な滴下数計算とリズムガイド
             </p>
           </div>
 
@@ -93,7 +93,7 @@ export default function Calculator() {
                 htmlFor="volume"
                 className="block text-sm font-semibold text-gray-700 uppercase tracking-wide"
               >
-                Total Volume (mL)
+                総輸液量 (mL)
               </label>
               <div className="relative">
                 <input
@@ -102,7 +102,7 @@ export default function Calculator() {
                   inputMode="decimal"
                   value={volume}
                   onChange={(e) => handleNumberInput(e.target.value, setVolume)}
-                  placeholder="Enter volume"
+                  placeholder="輸液量を入力"
                   className="w-full px-6 py-4 text-2xl font-semibold border-2 border-gray-300 rounded-xl focus:border-primary-600 focus:ring-4 focus:ring-primary-100 outline-none transition-all tap-highlight-transparent"
                 />
                 <div className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
@@ -115,7 +115,7 @@ export default function Calculator() {
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-gray-700 uppercase tracking-wide">
                 <Clock className="w-4 h-4 inline mr-1" />
-                Duration
+                予定時間
               </label>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -124,10 +124,10 @@ export default function Calculator() {
                     inputMode="numeric"
                     value={hours}
                     onChange={(e) => handleNumberInput(e.target.value, setHours, false)}
-                    placeholder="Hours"
+                    placeholder="時間"
                     className="w-full px-6 py-4 text-2xl font-semibold border-2 border-gray-300 rounded-xl focus:border-primary-600 focus:ring-4 focus:ring-primary-100 outline-none transition-all tap-highlight-transparent"
                   />
-                  <p className="text-xs text-gray-500 mt-1 text-center">Hours</p>
+                  <p className="text-xs text-gray-500 mt-1 text-center">時間</p>
                 </div>
                 <div>
                   <input
@@ -135,10 +135,10 @@ export default function Calculator() {
                     inputMode="numeric"
                     value={minutes}
                     onChange={(e) => handleNumberInput(e.target.value, setMinutes, false)}
-                    placeholder="Minutes"
+                    placeholder="分"
                     className="w-full px-6 py-4 text-2xl font-semibold border-2 border-gray-300 rounded-xl focus:border-primary-600 focus:ring-4 focus:ring-primary-100 outline-none transition-all tap-highlight-transparent"
                   />
-                  <p className="text-xs text-gray-500 mt-1 text-center">Minutes</p>
+                  <p className="text-xs text-gray-500 mt-1 text-center">分</p>
                 </div>
               </div>
             </div>
@@ -146,7 +146,7 @@ export default function Calculator() {
             {/* Drop Factor Toggle */}
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                Drop Factor (drops/mL)
+                滴下セット (滴/mL)
               </label>
               <div className="grid grid-cols-2 gap-4">
                 <button
@@ -157,7 +157,7 @@ export default function Calculator() {
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
-                  20
+                  20滴
                 </button>
                 <button
                   onClick={() => setDropFactor(60)}
@@ -167,7 +167,7 @@ export default function Calculator() {
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
-                  60
+                  60滴
                 </button>
               </div>
             </div>
@@ -178,29 +178,29 @@ export default function Calculator() {
             <div className="bg-gradient-to-br from-primary-600 to-primary-700 rounded-2xl shadow-lg p-6 text-white space-y-4">
               <div className="flex items-center gap-2 mb-2">
                 <CalcIcon className="w-5 h-5" />
-                <h2 className="text-lg font-semibold">Calculation Results</h2>
+                <h2 className="text-lg font-semibold">計算結果</h2>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                  <p className="text-sm text-primary-100 mb-1">Drops per Minute</p>
+                  <p className="text-sm text-primary-100 mb-1">滴下数</p>
                   <p className="text-4xl font-bold">{calculations.dropsPerMinute}</p>
-                  <p className="text-xs text-primary-200 mt-1">gtt/min</p>
+                  <p className="text-xs text-primary-200 mt-1">滴/分</p>
                 </div>
 
                 <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                  <p className="text-sm text-primary-100 mb-1">Seconds per Drop</p>
+                  <p className="text-sm text-primary-100 mb-1">1滴の間隔</p>
                   <p className="text-4xl font-bold">{calculations.secondsPerDrop}</p>
-                  <p className="text-xs text-primary-200 mt-1">seconds</p>
+                  <p className="text-xs text-primary-200 mt-1">秒</p>
                 </div>
               </div>
 
               <div className="bg-primary-800/50 rounded-lg p-3 text-sm">
                 <p className="text-primary-100">
-                  <strong>Rate:</strong> {volume} mL over{' '}
-                  {hours && parseInt(hours) > 0 && `${hours}h `}
-                  {minutes && parseInt(minutes) > 0 && `${minutes}min `}
-                  with {dropFactor} drops/mL factor
+                  <strong>設定:</strong> {volume} mLを{' '}
+                  {hours && parseInt(hours) > 0 && `${hours}時間`}
+                  {minutes && parseInt(minutes) > 0 && `${minutes}分`}
+                  で投与（{dropFactor}滴/mL）
                 </p>
               </div>
             </div>
@@ -227,7 +227,7 @@ export default function Calculator() {
               </a>
             </p>
             <p className="text-xs text-gray-500">
-              We're hiring healthcare technology professionals
+              医療技術専門職を募集しています
             </p>
           </footer>
         </div>

@@ -106,11 +106,11 @@ export default function Metronome({ intervalMs, isRunning, onToggle }: Metronome
   return (
     <div className="bg-white rounded-2xl shadow-lg p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">Drip Metronome</h3>
+        <h3 className="text-lg font-semibold text-gray-900">滴下メトロノーム</h3>
         <button
           onClick={() => setIsSoundEnabled(!isSoundEnabled)}
           className="p-2 rounded-lg hover:bg-gray-100 transition-colors tap-highlight-transparent"
-          aria-label={isSoundEnabled ? 'Mute sound' : 'Enable sound'}
+          aria-label={isSoundEnabled ? '音声ガイドをオフ' : '音声ガイドをオン'}
         >
           {isSoundEnabled ? (
             <Volume2 className="w-5 h-5 text-primary-600" />
@@ -156,19 +156,19 @@ export default function Metronome({ intervalMs, isRunning, onToggle }: Metronome
         {isRunning ? (
           <>
             <Pause className="w-5 h-5" />
-            Stop Metronome
+            リズムを停止
           </>
         ) : (
           <>
             <Play className="w-5 h-5" />
-            Start Metronome
+            リズムを開始
           </>
         )}
       </button>
 
       {isRunning && (
         <p className="text-xs text-center text-gray-500">
-          Metronome is running at {(60000 / intervalMs).toFixed(1)} beats per minute
+          メトロノーム作動中 ({(60000 / intervalMs).toFixed(1)} 回/分)
         </p>
       )}
     </div>

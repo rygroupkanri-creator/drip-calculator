@@ -13,13 +13,13 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
-  title: 'Drip Rate Calculator | R.Y. Group',
-  description: 'High-precision IV drip rate calculator with metronome for healthcare professionals',
+  title: '点滴計算機 | R.Y. Group',
+  description: '看護師のための高精度点滴滴下計算・リズムガイドツール',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Drip Calculator',
+    title: '点滴計算機',
   },
   formatDetection: {
     telephone: false,
@@ -36,7 +36,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="ja">
       <body className={inter.className}>{children}</body>
     </html>
   )
