@@ -11,37 +11,15 @@ interface Timer {
   notified5min: boolean
 }
 
-interface MultiTimerProps {
-  onAddTimer?: (timer: Timer) => void
-}
-
-export default function MultiTimer({ onAddTimer }: MultiTimerProps) {
+export default function MultiTimer() {
   const [timers, setTimers] = useState<Timer[]>([])
-  const [isOpen, setIsOpen] = useState(false)
   const [isAddingTimer, setIsAddingTimer] = useState(false)
   const [newTimerName, setNewTimerName] = useState('')
   const [newTimerVolume, setNewTimerVolume] = useState('')
   const [newTimerMinutes, setNewTimerMinutes] = useState('')
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default')
 
-  useEffect(() => {
-    // Check notification permission
-    if ('Notification' in window) {
-      setNotificationPermission(Notification.permission)
-    }
-
-    // Load timers from localStorage
-    loadTimers()
-
-    // Set up interval to check timers
-    const interval = setInterval(() => {
-      checkTimers()
-    }, 10000) // Check every 10 seconds
-
-    return () => clearInterval(interval)
-  }, [])
-
-  const loadTimers = () => {
+  const loadTimers = useCallback(() => {
     try {
       const saved = localStorage.getItem('drip-calc-timers')
       if (saved) {
@@ -53,41 +31,15 @@ export default function MultiTimer({ onAddTimer }: MultiTimerProps) {
     } catch (error) {
       console.error('Failed to load timers:', error)
     }
-  }
+  }, [])
 
-  const saveTimers = (timers: Timer[]) => {
+  const saveTimers = useCallback((timers: Timer[]) => {
     try {
       localStorage.setItem('drip-calc-timers', JSON.stringify(timers))
     } catch (error) {
       console.error('Failed to save timers:', error)
     }
-  }
-
-  const requestNotificationPermission = async () => {
-    if (!('Notification' in window)) {
-      alert('お使いのブラウザは通知機能に対応していません')
-      return false
-    }
-
-    if (Notification.permission === 'granted') {
-      return true
-    }
-
-    const permission = await Notification.requestPermission()
-    setNotificationPermission(permission)
-
-    if (permission === 'granted') {
-      // Test notification
-      new Notification('通知が有効になりました', {
-        body: '点滴終了5分前にお知らせします',
-        icon: '/icon-192.png',
-      })
-      return true
-    } else {
-      alert('通知を有効にするには、ブラウザの設定を変更してください')
-      return false
-    }
-  }
+  }, [])
 
   const checkTimers = useCallback(() => {
     const now = Date.now()
@@ -132,7 +84,50 @@ export default function MultiTimer({ onAddTimer }: MultiTimerProps) {
       setTimers(activeTimers)
       saveTimers(activeTimers)
     }
-  }, [timers])
+  }, [timers, saveTimers])
+
+  useEffect(() => {
+    // Check notification permission
+    if ('Notification' in window) {
+      setNotificationPermission(Notification.permission)
+    }
+
+    // Load timers from localStorage
+    loadTimers()
+
+    // Set up interval to check timers
+    const interval = setInterval(() => {
+      checkTimers()
+    }, 10000) // Check every 10 seconds
+
+    return () => clearInterval(interval)
+  }, [loadTimers, checkTimers])
+
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) {
+      alert('お使いのブラウザは通知機能に対応していません')
+      return false
+    }
+
+    if (Notification.permission === 'granted') {
+      return true
+    }
+
+    const permission = await Notification.requestPermission()
+    setNotificationPermission(permission)
+
+    if (permission === 'granted') {
+      // Test notification
+      new Notification('通知が有効になりました', {
+        body: '点滴終了5分前にお知らせします',
+        icon: '/icon-192.png',
+      })
+      return true
+    } else {
+      alert('通知を有効にするには、ブラウザの設定を変更してください')
+      return false
+    }
+  }
 
   const addTimer = async () => {
     if (!newTimerName.trim() || !newTimerVolume || !newTimerMinutes) {
