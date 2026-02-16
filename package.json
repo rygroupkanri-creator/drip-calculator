@@ -1,7 +1,7 @@
 {
   "name": "drip-rate-calculator",
-  "version": "1.0.0",
-  "description": "High-performance Drip Rate Calculator for Nurses",
+  "version": "2.0.0",
+  "description": "R.Y. Group Official - High-performance Drip Rate Calculator with Advanced Features",
   "private": true,
   "scripts": {
     "dev": "next dev",
