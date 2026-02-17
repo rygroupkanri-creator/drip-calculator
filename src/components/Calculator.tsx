@@ -113,7 +113,7 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
                   </h1>
                   <span className="bg-gradient-to-r from-sakura-400 to-sakura-500 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-lg">
                     <Sparkles className="w-3 h-3" />
-                    Ver.2.2
+                    Ver.3.0α
                   </span>
                 </div>
               </div>
@@ -258,7 +258,7 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
               {multiTimerRef && (
                 <button
                   onClick={handleStartTimer}
-                  className="w-full py-3.5 px-6 rounded-3xl font-semibold bg-white/95 text-sakura-600 hover:bg-white transition-all duration-200 tap-highlight-transparent active:scale-95 transform flex items-center justify-center gap-2 shadow-lg"
+                  className="w-full py-3.5 px-6 rounded-3xl font-bold bg-white text-pink-600 hover:bg-pink-50 border-2 border-pink-200 transition-all duration-200 tap-highlight-transparent active:scale-95 transform flex items-center justify-center gap-2 shadow-lg"
                 >
                   <Timer className="w-5 h-5" />
                   この内容でタイマーを開始
@@ -296,7 +296,7 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
               </p>
               <div className="mt-4 pt-4 border-t border-greige-300">
                 <p className="text-xs text-gray-400">
-                  Ver.2.2 Official Release | © 2026 R.Y. Group
+                  Ver.3.0α Official Release | © 2026 R.Y. Group
                 </p>
               </div>
             </div>

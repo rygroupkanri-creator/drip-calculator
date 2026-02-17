@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
+import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react'
 import { Clock, Bell, Plus, Trash2, X } from 'lucide-react'
 
 interface Timer {
   id: string
   name: string
-  endTime: number  // timestamp
+  endTime: number
   volume: string
   notified5min: boolean
 }
@@ -29,105 +29,94 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
   const [newTimerMinutes, setNewTimerMinutes] = useState('')
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default')
 
+  // Ref to always have the latest timers (fixes stale closure in addTimerFromCalculation)
+  const timersRef = useRef<Timer[]>(timers)
+  useEffect(() => {
+    timersRef.current = timers
+  }, [timers])
+
+  const saveTimersToStorage = useCallback((t: Timer[]) => {
+    try {
+      localStorage.setItem('drip-calc-timers', JSON.stringify(t))
+    } catch (error) {
+      console.error('Failed to save timers:', error)
+    }
+  }, [])
+
   const loadTimers = useCallback(() => {
     try {
       const saved = localStorage.getItem('drip-calc-timers')
       if (saved) {
-        const loadedTimers: Timer[] = JSON.parse(saved)
-        // Filter out expired timers
-        const activeTimers = loadedTimers.filter((t) => t.endTime > Date.now())
-        setTimers(activeTimers)
+        const loaded: Timer[] = JSON.parse(saved)
+        const active = loaded.filter((t) => t.endTime > Date.now())
+        setTimers(active)
       }
     } catch (error) {
       console.error('Failed to load timers:', error)
     }
   }, [])
 
-  const saveTimers = useCallback((timers: Timer[]) => {
-    try {
-      localStorage.setItem('drip-calc-timers', JSON.stringify(timers))
-    } catch (error) {
-      console.error('Failed to save timers:', error)
-    }
-  }, [])
-
-  const checkTimers = useCallback(() => {
-    const now = Date.now()
-    let updated = false
-
-    const updatedTimers = timers.map((timer) => {
-      const timeLeft = timer.endTime - now
-      const fiveMinutes = 5 * 60 * 1000
-
-      // Notify 5 minutes before
-      if (!timer.notified5min && timeLeft <= fiveMinutes && timeLeft > 0) {
-        if (Notification.permission === 'granted') {
-          new Notification(`${timer.name} まもなく終了`, {
-            body: `あと約5分で点滴が終了します（${timer.volume}mL）`,
-            icon: '/icon-192.png',
-            tag: `timer-${timer.id}-5min`,
-          })
-        }
-        updated = true
-        return { ...timer, notified5min: true }
-      }
-
-      // Notify at completion
-      if (timeLeft <= 0 && timer.notified5min) {
-        if (Notification.permission === 'granted') {
-          new Notification(`${timer.name} 終了`, {
-            body: `点滴が終了しました（${timer.volume}mL）`,
-            icon: '/icon-192.png',
-            tag: `timer-${timer.id}-done`,
-            requireInteraction: true,
-          })
-        }
-      }
-
-      return timer
-    })
-
-    // Remove expired timers
-    const activeTimers = updatedTimers.filter((t) => t.endTime > now)
-
-    if (updated || activeTimers.length !== timers.length) {
-      setTimers(activeTimers)
-      saveTimers(activeTimers)
-    }
-  }, [timers, saveTimers])
-
+  // Check timers for notifications
   useEffect(() => {
-    // Check notification permission
     if ('Notification' in window) {
       setNotificationPermission(Notification.permission)
     }
-
-    // Load timers from localStorage
     loadTimers()
 
-    // Set up interval to check timers
     const interval = setInterval(() => {
-      checkTimers()
-    }, 10000) // Check every 10 seconds
+      setTimers((prev) => {
+        const now = Date.now()
+        let changed = false
+        const updated = prev.map((timer) => {
+          const timeLeft = timer.endTime - now
+          const fiveMin = 5 * 60 * 1000
+
+          if (!timer.notified5min && timeLeft <= fiveMin && timeLeft > 0) {
+            if (Notification.permission === 'granted') {
+              new Notification(`${timer.name} まもなく終了`, {
+                body: `あと約5分で点滴が終了します（${timer.volume}mL）`,
+                icon: '/icon-192.png',
+                tag: `timer-${timer.id}-5min`,
+              })
+            }
+            changed = true
+            return { ...timer, notified5min: true }
+          }
+          if (timeLeft <= 0 && timer.notified5min) {
+            if (Notification.permission === 'granted') {
+              new Notification(`${timer.name} 終了`, {
+                body: `点滴が終了しました（${timer.volume}mL）`,
+                icon: '/icon-192.png',
+                tag: `timer-${timer.id}-done`,
+                requireInteraction: true,
+              })
+            }
+          }
+          return timer
+        })
+
+        const active = updated.filter((t) => t.endTime > now)
+        if (changed || active.length !== prev.length) {
+          saveTimersToStorage(active)
+          return active
+        }
+        return prev
+      })
+    }, 10000)
 
     return () => clearInterval(interval)
-  }, [loadTimers, checkTimers])
+  }, [loadTimers, saveTimersToStorage])
 
   const requestNotificationPermission = async () => {
     if (!('Notification' in window)) {
       alert('お使いのブラウザは通知機能に対応していません')
       return false
     }
-
-    if (Notification.permission === 'granted') {
-      return true
-    }
+    if (Notification.permission === 'granted') return true
 
     const permission = await Notification.requestPermission()
     setNotificationPermission(permission)
-
     if (permission === 'granted') {
-      // Test notification
       new Notification('通知が有効になりました', {
         body: '点滴終了5分前にお知らせします',
         icon: '/icon-192.png',
@@ -144,39 +133,31 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
       alert('すべての項目を入力してください')
       return
     }
-
-    const minutes = parseInt(newTimerMinutes)
-    if (isNaN(minutes) || minutes <= 0) {
+    const mins = parseInt(newTimerMinutes)
+    if (isNaN(mins) || mins <= 0) {
       alert('正しい時間を入力してください')
       return
     }
-
     if (timers.length >= MAX_TIMERS) {
       alert(`タイマーは最大${MAX_TIMERS}個までです。不要なタイマーを削除してください。`)
       return
     }
 
-    // Request notification permission if not granted
     if (Notification.permission !== 'granted') {
-      const granted = await requestNotificationPermission()
-      if (!granted) {
-        console.log('Notification permission denied, but creating timer anyway')
-      }
+      await requestNotificationPermission()
     }
 
     const newTimer: Timer = {
       id: Date.now().toString(),
       name: newTimerName.trim(),
-      endTime: Date.now() + minutes * 60 * 1000,
+      endTime: Date.now() + mins * 60 * 1000,
       volume: newTimerVolume,
       notified5min: false,
     }
 
-    const updatedTimers = [...timers, newTimer]
-    setTimers(updatedTimers)
-    saveTimers(updatedTimers)
-
-    console.log('Timer added successfully:', newTimer)
+    const updated = [...timers, newTimer]
+    setTimers(updated)
+    saveTimersToStorage(updated)
 
     setNewTimerName('')
     setNewTimerVolume('')
@@ -189,20 +170,21 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
     }
   }
 
-  // Function to add timer from calculation (exposed via ref)
-  const addTimerFromCalculation = useCallback(async (volume: string, totalMinutes: number, name?: string): Promise<string | null> => {
+  // Exposed via ref — uses timersRef to avoid stale closure
+  const addTimerFromCalculation = useCallback(async (
+    volume: string,
+    totalMinutes: number,
+    name?: string
+  ): Promise<string | null> => {
     try {
-      if (timers.length >= MAX_TIMERS) {
+      const current = timersRef.current
+      if (current.length >= MAX_TIMERS) {
         alert(`タイマーは最大${MAX_TIMERS}個までです。不要なタイマーを削除してください。`)
         return null
       }
 
-      // Request notification permission if not granted
       if (Notification.permission !== 'granted') {
-        const granted = await requestNotificationPermission()
-        if (!granted) {
-          console.log('Notification permission denied, but creating timer anyway')
-        }
+        await requestNotificationPermission()
       }
 
       const timerName = name || `点滴 ${volume}mL (${totalMinutes}分)`
@@ -210,48 +192,38 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
         id: Date.now().toString(),
         name: timerName,
         endTime: Date.now() + totalMinutes * 60 * 1000,
-        volume: volume,
+        volume,
         notified5min: false,
       }
 
-      const updatedTimers = [...timers, newTimer]
-      setTimers(updatedTimers)
-      saveTimers(updatedTimers)
+      const updated = [...current, newTimer]
+      setTimers(updated)
+      saveTimersToStorage(updated)
 
-      console.log('Timer created from calculation:', newTimer)
       const endTimeStr = new Date(newTimer.endTime).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
       return endTimeStr
     } catch (error) {
       console.error('Failed to create timer:', error)
-      alert('タイマーの作成に失敗しました')
       return null
     }
-  }, [timers, saveTimers])
+  }, [saveTimersToStorage])
 
-  // Expose addTimerFromCalculation to parent via ref
   useImperativeHandle(ref, () => ({
-    addTimerFromCalculation
+    addTimerFromCalculation,
   }), [addTimerFromCalculation])
 
   const deleteTimer = (id: string) => {
-    const updatedTimers = timers.filter((t) => t.id !== id)
-    setTimers(updatedTimers)
-    saveTimers(updatedTimers)
+    const updated = timers.filter((t) => t.id !== id)
+    setTimers(updated)
+    saveTimersToStorage(updated)
   }
 
   const formatTimeLeft = (endTime: number) => {
-    const now = Date.now()
-    const diff = endTime - now
-
+    const diff = endTime - Date.now()
     if (diff <= 0) return '終了'
-
-    const hours = Math.floor(diff / (1000 * 60 * 60))
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-
-    if (hours > 0) {
-      return `残り ${hours}時間${minutes}分`
-    }
-    return `残り ${minutes}分`
+    const h = Math.floor(diff / (1000 * 60 * 60))
+    const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+    return h > 0 ? `残り ${h}時間${m}分` : `残り ${m}分`
   }
 
   return (
@@ -276,7 +248,7 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
       </div>
 
       {timers.length > 0 && (
-        <div className="space-y-2 max-h-48 overflow-y-auto">
+        <div className="space-y-2 max-h-60 overflow-y-auto">
           {timers.map((timer) => (
             <div
               key={timer.id}
@@ -299,6 +271,13 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
         </div>
       )}
 
+      {timers.length === 0 && (
+        <div className="text-center py-8 text-gray-400">
+          <Clock className="w-12 h-12 mx-auto mb-2 opacity-30" />
+          <p className="text-sm">タイマーはまだ登録されていません</p>
+        </div>
+      )}
+
       <button
         onClick={() => setIsAddingTimer(true)}
         disabled={timers.length >= MAX_TIMERS}
@@ -312,7 +291,6 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
         {timers.length >= MAX_TIMERS ? `上限${MAX_TIMERS}件に達しています` : '新しいタイマーを追加'}
       </button>
 
-      {/* Add Timer Modal */}
       {isAddingTimer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 space-y-4">
@@ -333,9 +311,7 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
 
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  タイマー名
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">タイマー名</label>
                 <input
                   type="text"
                   value={newTimerName}
@@ -344,11 +320,8 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-2xl focus:border-mint-400 focus:ring-4 focus:ring-mint-100 outline-none transition-all"
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  輸液量 (mL)
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">輸液量 (mL)</label>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -358,11 +331,8 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-2xl focus:border-mint-400 focus:ring-4 focus:ring-mint-100 outline-none transition-all"
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  終了までの時間 (分)
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">終了までの時間 (分)</label>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -375,9 +345,7 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
             </div>
 
             <div className="bg-amber-50 border-l-4 border-amber-400 p-3 rounded-xl text-sm text-amber-900">
-              <p>
-                <strong>通知:</strong> 終了5分前と終了時に通知が届きます
-              </p>
+              <p><strong>通知:</strong> 終了5分前と終了時に通知が届きます</p>
             </div>
 
             <button
