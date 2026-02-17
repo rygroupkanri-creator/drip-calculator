@@ -59,8 +59,8 @@ export default function PresetManager({
       return
     }
 
-    if (presets.length >= 5) {
-      alert('プリセットは最大5つまでです。削除してから追加してください。')
+    if (presets.length >= 7) {
+      alert('プリセットは最大7つまでです。削除してから追加してください。')
       return
     }
 
@@ -104,16 +104,16 @@ export default function PresetManager({
           マイ・プリセット
         </h3>
         <div className="text-xs text-gray-500">
-          {presets.length}/5 保存中
+          {presets.length}/7 保存中
         </div>
       </div>
 
       <div className="flex gap-2">
         <button
           onClick={() => setIsSaving(true)}
-          disabled={presets.length >= 5}
+          disabled={presets.length >= 7}
           className={`flex-1 py-3 px-4 rounded-2xl font-medium transition-all tap-highlight-transparent active:scale-95 transform flex items-center justify-center gap-2 ${
-            presets.length >= 5
+            presets.length >= 7
               ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
               : 'bg-sakura-200 text-sakura-700 hover:bg-sakura-300'
           }`}

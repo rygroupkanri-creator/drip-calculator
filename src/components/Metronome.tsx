@@ -1,15 +1,18 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Volume2, VolumeX, Play, Pause, Vibrate } from 'lucide-react'
+import { Volume2, VolumeX, Play, Pause, Vibrate, Clock } from 'lucide-react'
 
 interface MetronomeProps {
   intervalMs: number // Time between beats in milliseconds
   isRunning: boolean
   onToggle: () => void
+  onStartTimer?: () => void // Callback to start timer with current calculation
+  volume?: string
+  totalMinutes?: number
 }
 
-export default function Metronome({ intervalMs, isRunning, onToggle }: MetronomeProps) {
+export default function Metronome({ intervalMs, isRunning, onToggle, onStartTimer, volume, totalMinutes }: MetronomeProps) {
   const [isSoundEnabled, setIsSoundEnabled] = useState(true)
   const [isVibrationEnabled, setIsVibrationEnabled] = useState(false)
   const [isPulsing, setIsPulsing] = useState(false)
@@ -37,11 +40,29 @@ export default function Metronome({ intervalMs, isRunning, onToggle }: Metronome
     }
   }, [])
 
+  // Resume AudioContext on user action (required by browsers)
+  const resumeAudioContext = useCallback(async () => {
+    if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+      try {
+        await audioContextRef.current.resume()
+        console.log('AudioContext resumed successfully')
+      } catch (error) {
+        console.error('Failed to resume AudioContext:', error)
+      }
+    }
+  }, [])
+
   // Play beat sound using Web Audio API for precision
   const playBeat = useCallback(() => {
     // Play sound
     if (audioContextRef.current && isSoundEnabled) {
       const context = audioContextRef.current
+
+      // Ensure context is running
+      if (context.state === 'suspended') {
+        context.resume().catch(err => console.error('AudioContext resume error:', err))
+      }
+
       const oscillator = context.createOscillator()
       const gainNode = context.createGain()
 
@@ -66,6 +87,19 @@ export default function Metronome({ intervalMs, isRunning, onToggle }: Metronome
       navigator.vibrate(50) // Short 50ms vibration
     }
   }, [isSoundEnabled, isVibrationEnabled])
+
+  // Handle toggle with AudioContext resume and initial vibration
+  const handleToggle = useCallback(async () => {
+    // Resume AudioContext on first user interaction
+    await resumeAudioContext()
+
+    // If starting, trigger initial vibration
+    if (!isRunning && isVibrationEnabled && 'vibrate' in navigator) {
+      navigator.vibrate(50)
+    }
+
+    onToggle()
+  }, [resumeAudioContext, isRunning, isVibrationEnabled, onToggle])
 
   // Trigger visual pulse
   const triggerPulse = () => {
@@ -136,7 +170,7 @@ export default function Metronome({ intervalMs, isRunning, onToggle }: Metronome
             )}
           </button>
 
-          {hasVibrationSupport && (
+          {hasVibrationSupport ? (
             <button
               onClick={() => setIsVibrationEnabled(!isVibrationEnabled)}
               className={`p-2 rounded-2xl transition-colors tap-highlight-transparent ${
@@ -147,9 +181,25 @@ export default function Metronome({ intervalMs, isRunning, onToggle }: Metronome
             >
               <Vibrate className="w-5 h-5" />
             </button>
+          ) : (
+            <div className="relative group">
+              <button
+                className="p-2 rounded-2xl bg-gray-100 text-gray-300 cursor-not-allowed"
+                disabled
+                title="お使いのブラウザは振動機能に非対応です"
+              >
+                <Vibrate className="w-5 h-5" />
+              </button>
+            </div>
           )}
         </div>
       </div>
+
+      {!hasVibrationSupport && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-800">
+          <p>💡 お使いのブラウザは振動機能に非対応です（視覚ガイドをご利用ください）</p>
+        </div>
+      )}
 
       {/* Visual Pulse Indicator */}
       <div className="flex items-center justify-center py-8">
@@ -177,7 +227,7 @@ export default function Metronome({ intervalMs, isRunning, onToggle }: Metronome
 
       {/* Control Button */}
       <button
-        onClick={onToggle}
+        onClick={handleToggle}
         className={`w-full py-4 px-6 rounded-3xl font-semibold text-white transition-all duration-200 tap-highlight-transparent active:scale-95 transform flex items-center justify-center gap-2 ${
           isRunning
             ? 'bg-gradient-to-r from-red-400 to-red-500 hover:from-red-500 hover:to-red-600 shadow-lg'
@@ -196,6 +246,17 @@ export default function Metronome({ intervalMs, isRunning, onToggle }: Metronome
           </>
         )}
       </button>
+
+      {/* Timer Start Button (shown when stopped and onStartTimer is available) */}
+      {!isRunning && onStartTimer && volume && totalMinutes && (
+        <button
+          onClick={onStartTimer}
+          className="w-full py-3 px-6 rounded-3xl font-medium text-mint-700 bg-mint-100 hover:bg-mint-200 border-2 border-mint-300 transition-all duration-200 tap-highlight-transparent active:scale-95 transform flex items-center justify-center gap-2"
+        >
+          <Clock className="w-5 h-5" />
+          このリズムでタイマーを開始
+        </button>
+      )}
 
       {isRunning && (
         <div className="bg-mint-50 border-2 border-mint-200 rounded-2xl p-3 text-center">

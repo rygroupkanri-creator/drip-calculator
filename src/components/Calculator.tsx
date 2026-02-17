@@ -1,13 +1,18 @@
 'use client'
 
 import { useState, useCallback, useMemo } from 'react'
-import { Droplets, Clock, Calculator as CalcIcon, Sparkles } from 'lucide-react'
+import { Droplets, Clock, Calculator as CalcIcon, Sparkles, Timer } from 'lucide-react'
 import DisclaimerModal from './DisclaimerModal'
 import Metronome from './Metronome'
 import PresetManager from './PresetManager'
-import MultiTimer from './MultiTimer'
+import { MultiTimerRef } from './MultiTimer'
 
-export default function Calculator() {
+interface CalculatorProps {
+  multiTimerRef?: React.RefObject<MultiTimerRef>
+  onToast?: (message: string, subMessage?: string) => void
+}
+
+export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) {
   const [hasAcceptedDisclaimer, setHasAcceptedDisclaimer] = useState(false)
   const [volume, setVolume] = useState<string>('') // mL
   const [hours, setHours] = useState<string>('') // hours
@@ -78,6 +83,19 @@ export default function Calculator() {
     []
   )
 
+  const handleStartTimer = useCallback(async () => {
+    if (!calculations || !multiTimerRef || !multiTimerRef.current) return
+
+    const totalMinutes = (parseFloat(hours) || 0) * 60 + (parseFloat(minutes) || 0)
+    const result = await multiTimerRef.current.addTimerFromCalculation(volume, totalMinutes)
+    if (result && onToast) {
+      onToast(
+        'タイマーを登録しました',
+        `${volume}mL / ${totalMinutes}分 — 終了予定: ${result}`
+      )
+    }
+  }, [calculations, volume, hours, minutes, multiTimerRef, onToast])
+
   return (
     <>
       <DisclaimerModal onAccept={handleDisclaimerAccept} />
@@ -95,7 +113,7 @@ export default function Calculator() {
                   </h1>
                   <span className="bg-gradient-to-r from-sakura-400 to-sakura-500 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-lg">
                     <Sparkles className="w-3 h-3" />
-                    Ver.2.0
+                    Ver.2.2
                   </span>
                 </div>
               </div>
@@ -235,11 +253,19 @@ export default function Calculator() {
                   で投与（{dropFactor}滴/mL）
                 </p>
               </div>
+
+              {/* Timer Start Button in Results */}
+              {multiTimerRef && (
+                <button
+                  onClick={handleStartTimer}
+                  className="w-full py-3.5 px-6 rounded-3xl font-semibold bg-white/95 text-sakura-600 hover:bg-white transition-all duration-200 tap-highlight-transparent active:scale-95 transform flex items-center justify-center gap-2 shadow-lg"
+                >
+                  <Timer className="w-5 h-5" />
+                  この内容でタイマーを開始
+                </button>
+              )}
             </div>
           )}
-
-          {/* MultiTimer */}
-          <MultiTimer />
 
           {/* Metronome */}
           {calculations && (
@@ -247,6 +273,9 @@ export default function Calculator() {
               intervalMs={calculations.msPerDrop}
               isRunning={isMetronomeRunning}
               onToggle={handleToggleMetronome}
+              onStartTimer={handleStartTimer}
+              volume={volume}
+              totalMinutes={(parseFloat(hours) || 0) * 60 + (parseFloat(minutes) || 0)}
             />
           )}
 
@@ -267,7 +296,7 @@ export default function Calculator() {
               </p>
               <div className="mt-4 pt-4 border-t border-greige-300">
                 <p className="text-xs text-gray-400">
-                  Ver.2.0 Official Release | © 2026 R.Y. Group
+                  Ver.2.2 Official Release | © 2026 R.Y. Group
                 </p>
               </div>
             </div>

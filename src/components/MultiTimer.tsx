@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
 import { Clock, Bell, Plus, Trash2, X } from 'lucide-react'
 
 interface Timer {
@@ -11,7 +11,17 @@ interface Timer {
   notified5min: boolean
 }
 
-export default function MultiTimer() {
+const MAX_TIMERS = 7
+
+export interface MultiTimerRef {
+  addTimerFromCalculation: (volume: string, totalMinutes: number, name?: string) => Promise<string | null>
+}
+
+interface MultiTimerProps {
+  onToast?: (message: string, subMessage?: string) => void
+}
+
+const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref) => {
   const [timers, setTimers] = useState<Timer[]>([])
   const [isAddingTimer, setIsAddingTimer] = useState(false)
   const [newTimerName, setNewTimerName] = useState('')
@@ -141,10 +151,17 @@ export default function MultiTimer() {
       return
     }
 
+    if (timers.length >= MAX_TIMERS) {
+      alert(`タイマーは最大${MAX_TIMERS}個までです。不要なタイマーを削除してください。`)
+      return
+    }
+
     // Request notification permission if not granted
     if (Notification.permission !== 'granted') {
       const granted = await requestNotificationPermission()
-      if (!granted) return
+      if (!granted) {
+        console.log('Notification permission denied, but creating timer anyway')
+      }
     }
 
     const newTimer: Timer = {
@@ -159,13 +176,62 @@ export default function MultiTimer() {
     setTimers(updatedTimers)
     saveTimers(updatedTimers)
 
+    console.log('Timer added successfully:', newTimer)
+
     setNewTimerName('')
     setNewTimerVolume('')
     setNewTimerMinutes('')
     setIsAddingTimer(false)
 
-    alert(`タイマー「${newTimer.name}」を追加しました`)
+    const endTimeStr = new Date(newTimer.endTime).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+    if (onToast) {
+      onToast(`タイマー「${newTimer.name}」を登録しました`, `終了予定: ${endTimeStr}`)
+    }
   }
+
+  // Function to add timer from calculation (exposed via ref)
+  const addTimerFromCalculation = useCallback(async (volume: string, totalMinutes: number, name?: string): Promise<string | null> => {
+    try {
+      if (timers.length >= MAX_TIMERS) {
+        alert(`タイマーは最大${MAX_TIMERS}個までです。不要なタイマーを削除してください。`)
+        return null
+      }
+
+      // Request notification permission if not granted
+      if (Notification.permission !== 'granted') {
+        const granted = await requestNotificationPermission()
+        if (!granted) {
+          console.log('Notification permission denied, but creating timer anyway')
+        }
+      }
+
+      const timerName = name || `点滴 ${volume}mL (${totalMinutes}分)`
+      const newTimer: Timer = {
+        id: Date.now().toString(),
+        name: timerName,
+        endTime: Date.now() + totalMinutes * 60 * 1000,
+        volume: volume,
+        notified5min: false,
+      }
+
+      const updatedTimers = [...timers, newTimer]
+      setTimers(updatedTimers)
+      saveTimers(updatedTimers)
+
+      console.log('Timer created from calculation:', newTimer)
+      const endTimeStr = new Date(newTimer.endTime).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+      return endTimeStr
+    } catch (error) {
+      console.error('Failed to create timer:', error)
+      alert('タイマーの作成に失敗しました')
+      return null
+    }
+  }, [timers, saveTimers])
+
+  // Expose addTimerFromCalculation to parent via ref
+  useImperativeHandle(ref, () => ({
+    addTimerFromCalculation
+  }), [addTimerFromCalculation])
 
   const deleteTimer = (id: string) => {
     const updatedTimers = timers.filter((t) => t.id !== id)
@@ -205,7 +271,7 @@ export default function MultiTimer() {
               通知を有効化
             </button>
           )}
-          <span className="text-xs text-gray-500">{timers.length} 件実行中</span>
+          <span className="text-xs text-gray-500">{timers.length}/{MAX_TIMERS} 件実行中</span>
         </div>
       </div>
 
@@ -235,10 +301,15 @@ export default function MultiTimer() {
 
       <button
         onClick={() => setIsAddingTimer(true)}
-        className="w-full bg-mint-300 hover:bg-mint-400 text-mint-800 font-medium py-3 px-4 rounded-2xl transition-all tap-highlight-transparent active:scale-95 transform flex items-center justify-center gap-2"
+        disabled={timers.length >= MAX_TIMERS}
+        className={`w-full font-medium py-3 px-4 rounded-2xl transition-all tap-highlight-transparent active:scale-95 transform flex items-center justify-center gap-2 ${
+          timers.length >= MAX_TIMERS
+            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            : 'bg-mint-300 hover:bg-mint-400 text-mint-800'
+        }`}
       >
         <Plus className="w-5 h-5" />
-        新しいタイマーを追加
+        {timers.length >= MAX_TIMERS ? `上限${MAX_TIMERS}件に達しています` : '新しいタイマーを追加'}
       </button>
 
       {/* Add Timer Modal */}
@@ -320,4 +391,8 @@ export default function MultiTimer() {
       )}
     </div>
   )
-}
+})
+
+MultiTimer.displayName = 'MultiTimer'
+
+export default MultiTimer
