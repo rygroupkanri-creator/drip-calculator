@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Mic, MicOff, Copy, Trash2, FileText, Pencil, Check, AlertTriangle, AlertCircle } from 'lucide-react'
+import { Mic, MicOff, Copy, Trash2, FileText, Pencil, Check, AlertTriangle, AlertCircle, Wand2, X, Sparkles, ListOrdered, MessageSquare, Loader2, Bot } from 'lucide-react'
 
 // --- Data types ---
 
@@ -12,6 +12,7 @@ interface Memo {
   text: string
   timestamp: string   // e.g. "2026/02/18 11:30"
   priority: Priority
+  aiGenerated?: boolean  // true if this memo was created/transformed by AI
 }
 
 // Migration: old format
@@ -28,6 +29,172 @@ const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; border: 
   normal:    { label: '通常', color: 'bg-gray-300',   border: 'border-l-gray-300',   bg: 'bg-gray-50' },
   important: { label: '重要', color: 'bg-amber-400',  border: 'border-l-amber-400',  bg: 'bg-amber-50/40' },
   urgent:    { label: '至急', color: 'bg-red-500',    border: 'border-l-red-500',    bg: 'bg-red-50/40' },
+}
+
+// --- AI Transform types ---
+
+type AITransformMode = 'soap' | 'bullets' | 'handoff'
+
+interface AITransformOption {
+  mode: AITransformMode
+  label: string
+  description: string
+  icon: typeof Sparkles
+}
+
+const AI_TRANSFORM_OPTIONS: AITransformOption[] = [
+  {
+    mode: 'soap',
+    label: 'SOAP形式に変換',
+    description: '経過記録（S/O/A/P）',
+    icon: Sparkles,
+  },
+  {
+    mode: 'bullets',
+    label: '箇条書きで整理',
+    description: '報告用リスト',
+    icon: ListOrdered,
+  },
+  {
+    mode: 'handoff',
+    label: '丁寧な申し送り文',
+    description: '交代時の引き継ぎ',
+    icon: MessageSquare,
+  },
+]
+
+// ============================================================
+// AI Transform Prompts (看護師・介護士向け最強整形プロンプト)
+// ============================================================
+//
+// 【SOAP形式プロンプト】
+// あなたは20年以上の経験を持つ熟練の看護師です。
+// 以下の断片的な音声メモから、バイタルサイン、症状、患者の訴え、
+// 観察所見を正確に抽出し、SOAP形式の経過記録を作成してください。
+//
+// S (Subjective / 主観的情報):
+//   - 患者本人の訴え、家族からの情報、主観的な症状
+//   - 「○○が痛い」「気分が悪い」などの発言をそのまま引用
+//
+// O (Objective / 客観的情報):
+//   - バイタルサイン (体温, 血圧, 脈拍, SpO2, 呼吸数)
+//   - 観察所見 (顔色, 浮腫, 皮膚の状態, 意識レベル)
+//   - 検査データ、点滴の残量、ドレーン排液量
+//
+// A (Assessment / アセスメント):
+//   - S と O から導かれる看護判断
+//   - リスクの評価、改善・悪化の判断
+//
+// P (Plan / 計画):
+//   - 今後の看護計画、観察ポイント
+//   - 医師への報告事項、次回バイタル測定時間
+//
+// 注意: 記載がない情報は「記載なし」と明記。推測で補完しないこと。
+//
+// 【箇条書き整理プロンプト】
+// あなたは看護リーダーへの報告を準備する看護師です。
+// 以下の音声メモから重要な情報を抽出し、以下のカテゴリに分類して
+// 簡潔な箇条書きリストを作成してください:
+// ・バイタルサイン
+// ・現在の症状・訴え
+// ・実施した処置・ケア
+// ・注意事項・申し送り事項
+// ・医師指示の確認事項
+// 該当がないカテゴリは省略してください。
+//
+// 【申し送り文プロンプト】
+// あなたは勤務交代時の申し送りを行う看護師です。
+// 以下の音声メモから、次の勤務者が必要とする情報を
+// 丁寧かつ簡潔な文章で整理してください。
+// 構成:
+// 1. 患者の現在の状態（全体像）
+// 2. 本勤務中の変化・イベント
+// 3. 実施した処置と反応
+// 4. 継続観察が必要な事項
+// 5. 次勤務での注意点・予定
+// 敬体（です・ます調）で記載してください。
+// ============================================================
+
+/**
+ * AI テキスト変換関数（拡張ポイント）
+ *
+ * 現在はプロトタイプとして擬似変換を行います。
+ * 将来的に OpenAI / Anthropic API に接続する場合は、
+ * この関数の中身を API 呼び出しに差し替えてください。
+ *
+ * @param text    元のメモテキスト
+ * @param mode    変換モード ('soap' | 'bullets' | 'handoff')
+ * @returns       変換後のテキスト
+ */
+async function transformTextWithAI(text: string, mode: AITransformMode): Promise<string> {
+  // --- プロトタイプ: 3秒の疑似遅延 + ルールベース整形 ---
+  await new Promise((resolve) => setTimeout(resolve, 3000))
+
+  const now = new Date()
+  const timeStr = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`
+
+  switch (mode) {
+    case 'soap':
+      return [
+        '【S（主観的情報）】',
+        `患者の訴え: ${text}`,
+        '',
+        '【O（客観的情報）】',
+        '・バイタルサイン: （メモから該当情報を抽出）',
+        '・観察所見: （メモから該当情報を抽出）',
+        '・点滴・ドレーン: （該当あれば記載）',
+        '',
+        '【A（アセスメント）】',
+        '・上記の訴えおよび所見から、現時点での状態を評価。',
+        '・継続観察の必要性あり。',
+        '',
+        '【P（計画）】',
+        '・バイタルサイン経時的測定を継続',
+        '・状態変化時は医師へ報告',
+        `・次回確認予定: ${timeStr} 以降`,
+      ].join('\n')
+
+    case 'bullets':
+      return [
+        '■ 報告用メモ（箇条書き）',
+        '',
+        '【バイタル・症状】',
+        `・${text}`,
+        '',
+        '【実施した処置】',
+        '・（該当する処置を記載）',
+        '',
+        '【注意事項】',
+        '・状態変化に注意し経過観察を継続',
+        '',
+        '【医師指示確認】',
+        '・指示変更の有無を確認済み',
+      ].join('\n')
+
+    case 'handoff':
+      return [
+        `申し送り（${now.getMonth() + 1}/${now.getDate()} ${timeStr} 作成）`,
+        '',
+        `お疲れ様です。以下、申し送り事項をお伝えいたします。`,
+        '',
+        `【現在の状態】`,
+        `${text}`,
+        '',
+        `【本勤務中の経過】`,
+        `上記の通り、患者様の状態を観察いたしました。`,
+        '',
+        `【継続観察事項】`,
+        `引き続きバイタルサインの変動と自覚症状の有無にご注意ください。`,
+        '',
+        `【次勤務での注意点】`,
+        `状態に変化があれば、速やかに医師へご連絡をお願いいたします。`,
+        '',
+        `以上、よろしくお願いいたします。`,
+      ].join('\n')
+
+    default:
+      return text
+  }
 }
 
 // --- Web Speech API types ---
@@ -102,6 +269,10 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
   const [editText, setEditText] = useState('')
   const [recordingStartTime, setRecordingStartTime] = useState<Date | null>(null)
 
+  // AI transform state
+  const [aiMenuOpenId, setAiMenuOpenId] = useState<string | null>(null)
+  const [aiProcessingId, setAiProcessingId] = useState<string | null>(null)
+
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
   const isStoppingRef = useRef(false)
   const currentTextRef = useRef('')
@@ -151,6 +322,14 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
     }
   }, [])
 
+  // Close AI menu when clicking outside
+  useEffect(() => {
+    if (!aiMenuOpenId) return
+    const handler = () => setAiMenuOpenId(null)
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [aiMenuOpenId])
+
   const persistMemos = useCallback((updated: Memo[]) => {
     setMemos(updated)
     try {
@@ -190,9 +369,7 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
       if (finalStr) {
         setCurrentText((prev) => {
           const newText = prev + finalStr
-          // Also update ref immediately for reliable access
           currentTextRef.current = newText
-          // Auto-save draft to localStorage on every final result
           try {
             localStorage.setItem('drip-calc-voice-draft', newText)
           } catch { /* ignore */ }
@@ -214,11 +391,9 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
 
     recognition.onend = () => {
       if (!isStoppingRef.current && recognitionRef.current) {
-        // Auto-restart for continuous recording
         try {
           recognitionRef.current.start()
         } catch {
-          // Restart failed — save whatever we have
           const text = currentTextRef.current.trim()
           if (text) {
             const ts = recordingStartRef.current
@@ -238,7 +413,6 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
           setIsRecording(false)
           setCurrentText('')
           setInterimText('')
-          // Clean up draft
           try { localStorage.removeItem('drip-calc-voice-draft') } catch { /* ignore */ }
         }
       }
@@ -249,7 +423,7 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
     setIsRecording(true)
     setCurrentText('')
     setInterimText('')
-  }, [])
+  }, [persistMemos])
 
   const stopRecording = useCallback(() => {
     isStoppingRef.current = true
@@ -262,7 +436,6 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
 
     setIsRecording(false)
 
-    // Use refs to get the absolute latest values (avoids stale closure)
     const text = currentTextRef.current.trim()
     if (text) {
       const ts = recordingStartRef.current
@@ -285,7 +458,6 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
     setCurrentText('')
     setInterimText('')
     setRecordingStartTime(null)
-    // Clean up draft
     try { localStorage.removeItem('drip-calc-voice-draft') } catch { /* ignore */ }
   }, [persistMemos, onToast])
 
@@ -340,6 +512,49 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
       if (onToast) onToast('クリップボードにコピーしました')
     }
   }, [onToast])
+
+  // --- AI Transform ---
+
+  const handleAITransform = useCallback(async (memoId: string, mode: AITransformMode) => {
+    setAiMenuOpenId(null)
+    setAiProcessingId(memoId)
+
+    const memo = memosRef.current.find((m) => m.id === memoId)
+    if (!memo) {
+      setAiProcessingId(null)
+      return
+    }
+
+    try {
+      const transformedText = await transformTextWithAI(memo.text, mode)
+
+      // Create a new AI-generated memo (preserves original)
+      const aiMemo: Memo = {
+        id: Date.now().toString(),
+        text: transformedText,
+        timestamp: formatTimestamp(new Date()),
+        priority: memo.priority,
+        aiGenerated: true,
+      }
+
+      const latest = memosRef.current
+      // Insert right after the original memo
+      const originalIndex = latest.findIndex((m) => m.id === memoId)
+      const updated = [...latest]
+      updated.splice(originalIndex + 1, 0, aiMemo)
+      persistMemos(updated.slice(0, MAX_MEMOS))
+
+      if (onToast) {
+        const label = AI_TRANSFORM_OPTIONS.find((o) => o.mode === mode)?.label ?? 'AI整形'
+        onToast(`${label}が完了しました`, 'AI作成メモとして保存')
+      }
+    } catch (error) {
+      console.error('AI transform failed:', error)
+      if (onToast) onToast('AI整形に失敗しました', 'もう一度お試しください')
+    } finally {
+      setAiProcessingId(null)
+    }
+  }, [persistMemos, onToast])
 
   // --- Render ---
 
@@ -438,19 +653,47 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
             {memos.map((memo) => {
               const pCfg = PRIORITY_CONFIG[memo.priority]
               const isEditing = editingId === memo.id
+              const isAiProcessing = aiProcessingId === memo.id
+              const isAiMenuOpen = aiMenuOpenId === memo.id
 
               return (
                 <div
                   key={memo.id}
-                  className={`rounded-xl border border-gray-100 overflow-hidden flex ${pCfg.bg}`}
+                  className={`rounded-xl border overflow-hidden flex transition-all ${
+                    isAiProcessing
+                      ? 'border-violet-200 bg-violet-50/30'
+                      : memo.aiGenerated
+                      ? 'border-violet-100 bg-gradient-to-r from-violet-50/40 to-indigo-50/30'
+                      : `border-gray-100 ${pCfg.bg}`
+                  }`}
                 >
                   {/* Left priority indicator */}
-                  <div className={`w-1 shrink-0 ${pCfg.color}`} />
+                  <div className={`w-1 shrink-0 ${
+                    memo.aiGenerated ? 'bg-gradient-to-b from-violet-400 to-indigo-400' : pCfg.color
+                  }`} />
 
                   {/* Content */}
                   <div className="flex-1 p-3 min-w-0 space-y-2">
+                    {/* AI badge */}
+                    {memo.aiGenerated && !isEditing && (
+                      <div className="flex items-center gap-1 mb-1">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-violet-100 text-violet-600 text-[9px] font-semibold uppercase tracking-wider">
+                          <Bot className="w-3 h-3" />
+                          AI作成
+                        </span>
+                      </div>
+                    )}
+
+                    {/* AI processing overlay */}
+                    {isAiProcessing && (
+                      <div className="flex items-center gap-2 py-3 justify-center">
+                        <Loader2 className="w-5 h-5 text-violet-500 animate-spin" />
+                        <span className="text-sm font-medium text-violet-600">AIが解析中...</span>
+                      </div>
+                    )}
+
                     {/* Text / Edit area */}
-                    {isEditing ? (
+                    {!isAiProcessing && isEditing ? (
                       <div className="space-y-2">
                         <textarea
                           value={editText}
@@ -475,14 +718,14 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
                           </button>
                         </div>
                       </div>
-                    ) : (
+                    ) : !isAiProcessing ? (
                       <p className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">
                         {memo.text}
                       </p>
-                    )}
+                    ) : null}
 
                     {/* Bottom row: timestamp + priority + actions */}
-                    {!isEditing && (
+                    {!isEditing && !isAiProcessing && (
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="text-[10px] text-gray-400 whitespace-nowrap tabular-nums">
@@ -528,6 +771,63 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
 
                         {/* Action buttons */}
                         <div className="flex gap-0.5 shrink-0">
+                          {/* AI Transform button */}
+                          <div className="relative">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setAiMenuOpenId(isAiMenuOpen ? null : memo.id)
+                              }}
+                              className={`p-1.5 rounded-lg transition-colors ${
+                                isAiMenuOpen
+                                  ? 'text-violet-600 bg-violet-100'
+                                  : 'text-violet-400 hover:text-violet-600 hover:bg-violet-50'
+                              }`}
+                              title="AI整形"
+                            >
+                              <Wand2 className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* AI Transform Menu */}
+                            {isAiMenuOpen && (
+                              <div
+                                className="absolute right-0 bottom-full mb-1 w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 z-50"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="px-3 py-1.5 flex items-center justify-between border-b border-gray-50 mb-1">
+                                  <span className="text-[10px] font-bold text-violet-500 uppercase tracking-wider flex items-center gap-1">
+                                    <Sparkles className="w-3 h-3" />
+                                    AI整形
+                                  </span>
+                                  <button
+                                    onClick={() => setAiMenuOpenId(null)}
+                                    className="p-0.5 hover:bg-gray-100 rounded"
+                                  >
+                                    <X className="w-3 h-3 text-gray-400" />
+                                  </button>
+                                </div>
+                                {AI_TRANSFORM_OPTIONS.map((option) => {
+                                  const Icon = option.icon
+                                  return (
+                                    <button
+                                      key={option.mode}
+                                      onClick={() => handleAITransform(memo.id, option.mode)}
+                                      className="w-full text-left px-3 py-2 hover:bg-violet-50 transition-colors flex items-center gap-2.5"
+                                    >
+                                      <div className="w-7 h-7 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
+                                        <Icon className="w-3.5 h-3.5 text-violet-500" />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="text-xs font-semibold text-gray-800 truncate">{option.label}</p>
+                                        <p className="text-[10px] text-gray-400">{option.description}</p>
+                                      </div>
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+
                           <button
                             onClick={() => startEdit(memo)}
                             className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
