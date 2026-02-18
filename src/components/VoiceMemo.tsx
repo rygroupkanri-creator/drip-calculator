@@ -113,7 +113,7 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
   useEffect(() => { memosRef.current = memos }, [memos])
   useEffect(() => { recordingStartRef.current = recordingStartTime }, [recordingStartTime])
 
-  // Load memos from localStorage (with migration)
+  // Load memos from localStorage (with migration) + recover draft
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
@@ -121,6 +121,22 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
         const parsed = JSON.parse(saved) as (Memo | LegacyMemo)[]
         const migrated = parsed.map(migrateMemo)
         setMemos(migrated)
+      }
+      // Recover any unsaved draft from a previous session
+      const draft = localStorage.getItem('drip-calc-voice-draft')
+      if (draft && draft.trim()) {
+        const newMemo: Memo = {
+          id: Date.now().toString(),
+          text: draft.trim(),
+          timestamp: formatTimestamp(new Date()),
+          priority: 'normal',
+        }
+        setMemos((prev) => {
+          const updated = [newMemo, ...prev].slice(0, MAX_MEMOS)
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+          return updated
+        })
+        localStorage.removeItem('drip-calc-voice-draft')
       }
     } catch (e) {
       console.error('Failed to load memos:', e)
@@ -172,7 +188,16 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
         }
       }
       if (finalStr) {
-        setCurrentText((prev) => prev + finalStr)
+        setCurrentText((prev) => {
+          const newText = prev + finalStr
+          // Also update ref immediately for reliable access
+          currentTextRef.current = newText
+          // Auto-save draft to localStorage on every final result
+          try {
+            localStorage.setItem('drip-calc-voice-draft', newText)
+          } catch { /* ignore */ }
+          return newText
+        })
       }
       setInterimText(interim)
     }
@@ -189,11 +214,32 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
 
     recognition.onend = () => {
       if (!isStoppingRef.current && recognitionRef.current) {
+        // Auto-restart for continuous recording
         try {
           recognitionRef.current.start()
         } catch {
+          // Restart failed — save whatever we have
+          const text = currentTextRef.current.trim()
+          if (text) {
+            const ts = recordingStartRef.current
+              ? formatTimestamp(recordingStartRef.current)
+              : formatTimestamp(new Date())
+            const newMemo: Memo = {
+              id: Date.now().toString(),
+              text,
+              timestamp: ts,
+              priority: 'normal',
+            }
+            const latest = memosRef.current
+            const updated = [newMemo, ...latest].slice(0, MAX_MEMOS)
+            persistMemos(updated)
+          }
           recognitionRef.current = null
           setIsRecording(false)
+          setCurrentText('')
+          setInterimText('')
+          // Clean up draft
+          try { localStorage.removeItem('drip-calc-voice-draft') } catch { /* ignore */ }
         }
       }
     }
@@ -239,6 +285,8 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
     setCurrentText('')
     setInterimText('')
     setRecordingStartTime(null)
+    // Clean up draft
+    try { localStorage.removeItem('drip-calc-voice-draft') } catch { /* ignore */ }
   }, [persistMemos, onToast])
 
   // --- Memo actions ---

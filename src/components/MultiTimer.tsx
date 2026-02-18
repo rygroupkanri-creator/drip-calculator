@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react'
-import { Clock, Bell, Plus, Trash2, X } from 'lucide-react'
+import { Clock, Bell, Plus, Trash2, X, Volume2 } from 'lucide-react'
 
 interface Timer {
   id: string
@@ -10,6 +10,7 @@ interface Timer {
   endTime: number
   volume: string
   notified5min: boolean
+  notifiedDone: boolean
 }
 
 const MAX_TIMERS = 7
@@ -20,6 +21,41 @@ export interface MultiTimerRef {
 
 interface MultiTimerProps {
   onToast?: (message: string, subMessage?: string) => void
+}
+
+// Web Audio API alarm sound
+function playAlarmSound(isUrgent = false) {
+  try {
+    const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+    const playBeep = (startTime: number, freq: number, duration: number) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.frequency.value = freq
+      osc.type = 'sine'
+      gain.gain.setValueAtTime(0.3, startTime)
+      gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration)
+      osc.start(startTime)
+      osc.stop(startTime + duration)
+    }
+
+    if (isUrgent) {
+      // Urgent: 3 rapid high-pitched beeps
+      playBeep(ctx.currentTime, 880, 0.15)
+      playBeep(ctx.currentTime + 0.2, 880, 0.15)
+      playBeep(ctx.currentTime + 0.4, 1100, 0.3)
+    } else {
+      // 5-min warning: 2 gentle beeps
+      playBeep(ctx.currentTime, 660, 0.2)
+      playBeep(ctx.currentTime + 0.3, 880, 0.2)
+    }
+
+    // Close context after sounds finish
+    setTimeout(() => ctx.close(), 2000)
+  } catch (e) {
+    console.warn('Audio playback failed:', e)
+  }
 }
 
 const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref) => {
@@ -49,12 +85,12 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
       const saved = localStorage.getItem('drip-calc-timers')
       if (saved) {
         const loaded: Timer[] = JSON.parse(saved)
-        // Migration: add startTime for old timers that don't have it
         const active = loaded
           .filter((t) => t.endTime > Date.now())
           .map((t) => ({
             ...t,
             startTime: t.startTime || (t.endTime - 60 * 60 * 1000),
+            notifiedDone: t.notifiedDone ?? false,
           }))
         setTimers(active)
       }
@@ -71,7 +107,7 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
     return () => clearInterval(tickInterval)
   }, [])
 
-  // Check timers for notifications (every 10 seconds)
+  // Check timers for notifications (every 5 seconds for better responsiveness)
   useEffect(() => {
     if ('Notification' in window) {
       setNotificationPermission(Notification.permission)
@@ -85,8 +121,11 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
         const updated = prev.map((timer) => {
           const timeLeft = timer.endTime - now
           const fiveMin = 5 * 60 * 1000
+          const updates: Partial<Timer> = {}
 
+          // 5-min warning
           if (!timer.notified5min && timeLeft <= fiveMin && timeLeft > 0) {
+            playAlarmSound(false)
             if (Notification.permission === 'granted') {
               new Notification(`${timer.name} まもなく終了`, {
                 body: `あと約5分で点滴が終了します（${timer.volume}mL）`,
@@ -94,10 +133,13 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
                 tag: `timer-${timer.id}-5min`,
               })
             }
+            updates.notified5min = true
             changed = true
-            return { ...timer, notified5min: true }
           }
-          if (timeLeft <= 0 && timer.notified5min) {
+
+          // Completion notification
+          if (!timer.notifiedDone && timeLeft <= 0) {
+            playAlarmSound(true)
             if (Notification.permission === 'granted') {
               new Notification(`${timer.name} 終了`, {
                 body: `点滴が終了しました（${timer.volume}mL）`,
@@ -106,18 +148,26 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
                 requireInteraction: true,
               })
             }
+            updates.notifiedDone = true
+            changed = true
+          }
+
+          if (Object.keys(updates).length > 0) {
+            return { ...timer, ...updates }
           }
           return timer
         })
 
-        const active = updated.filter((t) => t.endTime > now)
+        // Keep expired timers for 2 minutes after completion so user can see them
+        const twoMinAgo = now - 2 * 60 * 1000
+        const active = updated.filter((t) => t.endTime > twoMinAgo)
         if (changed || active.length !== prev.length) {
           saveTimersToStorage(active)
           return active
         }
         return prev
       })
-    }, 10000)
+    }, 5000)
 
     return () => clearInterval(interval)
   }, [loadTimers, saveTimersToStorage])
@@ -170,6 +220,7 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
       endTime: now + mins * 60 * 1000,
       volume: newTimerVolume,
       notified5min: false,
+      notifiedDone: false,
     }
 
     const updated = [...timers, newTimer]
@@ -212,6 +263,7 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
         endTime: now + totalMinutes * 60 * 1000,
         volume,
         notified5min: false,
+        notifiedDone: false,
       }
 
       const updated = [...current, newTimer]
@@ -246,6 +298,10 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
     return new Date(endTime).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
   }
 
+  const formatStartTime = (startTime: number) => {
+    return new Date(startTime).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+  }
+
   const formatCountdown = (endTime: number) => {
     const diff = endTime - Date.now()
     if (diff <= 0) return '終了'
@@ -256,25 +312,36 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
     return `${m}:${s.toString().padStart(2, '0')}`
   }
 
+  const isExpired = (timer: Timer) => timer.endTime <= Date.now()
+
   return (
     <div className="space-y-3">
       {timers.length > 0 && (
         <div className="space-y-3">
           {timers.map((timer) => {
             const progress = getProgress(timer)
-            const isNearEnd = progress > 0.9
+            const expired = isExpired(timer)
+            const isNearEnd = !expired && progress > 0.9
             return (
               <div
                 key={timer.id}
                 className={`bg-white rounded-2xl shadow-sm border p-4 transition-colors ${
-                  isNearEnd ? 'border-red-200 bg-red-50/30' : 'border-gray-100'
+                  expired
+                    ? 'border-gray-200 bg-gray-50/50 opacity-70'
+                    : isNearEnd
+                    ? 'border-red-200 bg-red-50/30'
+                    : 'border-gray-100'
                 }`}
               >
-                {/* Top row: name + delete */}
+                {/* Top row: name + volume + delete */}
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-800 text-sm truncate">{timer.name}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{timer.volume}mL</p>
+                    <p className={`font-semibold text-sm truncate ${expired ? 'text-gray-400' : 'text-gray-800'}`}>
+                      {timer.name}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {timer.volume}mL ・ {formatStartTime(timer.startTime)} 開始
+                    </p>
                   </div>
                   <button
                     onClick={() => deleteTimer(timer.id)}
@@ -284,30 +351,42 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
                   </button>
                 </div>
 
-                {/* End time — prominent display */}
+                {/* End time + countdown */}
                 <div className="flex items-baseline justify-between mb-2">
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-2xl font-bold text-gray-800 tabular-nums">
+                    <span className={`text-2xl font-bold tabular-nums ${expired ? 'text-gray-400' : 'text-gray-800'}`}>
                       {formatEndTime(timer.endTime)}
                     </span>
-                    <span className="text-xs text-gray-500">終了</span>
+                    <span className="text-xs text-gray-500">
+                      {expired ? '終了済み' : '終了'}
+                    </span>
                   </div>
-                  <span className={`text-sm font-mono tabular-nums ${
-                    isNearEnd ? 'text-red-500 font-semibold' : 'text-gray-500'
-                  }`}>
-                    残 {formatCountdown(timer.endTime)}
-                  </span>
+                  {!expired && (
+                    <span className={`text-sm font-mono tabular-nums ${
+                      isNearEnd ? 'text-red-500 font-semibold' : 'text-gray-500'
+                    }`}>
+                      残 {formatCountdown(timer.endTime)}
+                    </span>
+                  )}
+                  {expired && (
+                    <span className="text-xs text-gray-400 flex items-center gap-1">
+                      <Volume2 className="w-3 h-3" />
+                      通知済み
+                    </span>
+                  )}
                 </div>
 
                 {/* Progress bar */}
                 <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-1000 ease-linear ${
-                      isNearEnd
+                      expired
+                        ? 'bg-gray-300'
+                        : isNearEnd
                         ? 'bg-gradient-to-r from-red-400 to-red-500'
                         : 'bg-gradient-to-r from-mint-400 to-mint-500'
                     }`}
-                    style={{ width: `${progress * 100}%` }}
+                    style={{ width: `${Math.min(progress * 100, 100)}%` }}
                   />
                 </div>
               </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useMemo } from 'react'
-import { Droplets, Clock, Calculator as CalcIcon, Sparkles, Timer } from 'lucide-react'
+import { Droplets, Clock, Calculator as CalcIcon, Sparkles, Timer, User } from 'lucide-react'
 import DisclaimerModal from './DisclaimerModal'
 import Metronome from './Metronome'
 import PresetManager from './PresetManager'
@@ -19,6 +19,7 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
   const [minutes, setMinutes] = useState<string>('') // minutes
   const [dropFactor, setDropFactor] = useState<20 | 60>(20)
   const [isMetronomeRunning, setIsMetronomeRunning] = useState(false)
+  const [timerName, setTimerName] = useState<string>('')
 
   // Core calculation logic
   const calculations = useMemo(() => {
@@ -87,7 +88,8 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
     if (!calculations || !multiTimerRef || !multiTimerRef.current) return
 
     const totalMinutes = (parseFloat(hours) || 0) * 60 + (parseFloat(minutes) || 0)
-    const result = await multiTimerRef.current.addTimerFromCalculation(volume, totalMinutes)
+    const nameToUse = timerName.trim() || undefined
+    const result = await multiTimerRef.current.addTimerFromCalculation(volume, totalMinutes, nameToUse)
     if (result && onToast) {
       onToast(
         'タイマーを登録しました',
@@ -111,7 +113,7 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
               </h1>
               <span className="bg-gradient-to-r from-sakura-400 to-sakura-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm">
                 <Sparkles className="w-2.5 h-2.5" />
-                3.2
+                3.3
               </span>
             </div>
             <p className="text-gray-500 text-sm">
@@ -247,15 +249,29 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
                 </p>
               </div>
 
-              {/* Timer Start Button in Results */}
+              {/* Timer Name Input + Start Button */}
               {multiTimerRef && (
-                <button
-                  onClick={handleStartTimer}
-                  className="w-full py-3.5 px-6 rounded-2xl font-bold bg-pink-500 text-white hover:bg-pink-600 transition-all duration-200 tap-highlight-transparent active:scale-[0.98] transform flex items-center justify-center gap-2 shadow-lg whitespace-nowrap"
-                >
-                  <Timer className="w-5 h-5" />
-                  この内容でタイマーを開始
-                </button>
+                <div className="space-y-3">
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-white/60">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="text"
+                      value={timerName}
+                      onChange={(e) => setTimerName(e.target.value)}
+                      placeholder="タイマー名（例: ベッド3 田中様）"
+                      className="w-full pl-10 pr-4 py-3 text-sm font-medium bg-white/15 border border-white/25 rounded-xl text-white placeholder-white/50 outline-none focus:bg-white/20 focus:border-white/40 transition-all"
+                    />
+                  </div>
+                  <button
+                    onClick={handleStartTimer}
+                    className="w-full py-3.5 px-6 rounded-2xl font-bold bg-pink-500 text-white hover:bg-pink-600 transition-all duration-200 tap-highlight-transparent active:scale-[0.98] transform flex items-center justify-center gap-2 shadow-lg whitespace-nowrap"
+                  >
+                    <Timer className="w-5 h-5" />
+                    この内容でタイマーを開始
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -285,7 +301,7 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
                 </a>
               </p>
               <p className="text-xs text-gray-400 mt-3">
-                Ver.3.2 | © 2026 R.Y. Group
+                Ver.3.3 | © 2026 R.Y. Group
               </p>
             </div>
           </footer>
