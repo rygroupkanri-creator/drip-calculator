@@ -6,6 +6,7 @@ import { Clock, Bell, Plus, Trash2, X } from 'lucide-react'
 interface Timer {
   id: string
   name: string
+  startTime: number
   endTime: number
   volume: string
   notified5min: boolean
@@ -28,8 +29,8 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
   const [newTimerVolume, setNewTimerVolume] = useState('')
   const [newTimerMinutes, setNewTimerMinutes] = useState('')
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default')
+  const [, setTick] = useState(0) // Force re-render for countdown
 
-  // Ref to always have the latest timers (fixes stale closure in addTimerFromCalculation)
   const timersRef = useRef<Timer[]>(timers)
   useEffect(() => {
     timersRef.current = timers
@@ -48,7 +49,13 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
       const saved = localStorage.getItem('drip-calc-timers')
       if (saved) {
         const loaded: Timer[] = JSON.parse(saved)
-        const active = loaded.filter((t) => t.endTime > Date.now())
+        // Migration: add startTime for old timers that don't have it
+        const active = loaded
+          .filter((t) => t.endTime > Date.now())
+          .map((t) => ({
+            ...t,
+            startTime: t.startTime || (t.endTime - 60 * 60 * 1000),
+          }))
         setTimers(active)
       }
     } catch (error) {
@@ -56,7 +63,15 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
     }
   }, [])
 
-  // Check timers for notifications
+  // Real-time countdown tick (every 1 second)
+  useEffect(() => {
+    const tickInterval = setInterval(() => {
+      setTick((prev) => prev + 1)
+    }, 1000)
+    return () => clearInterval(tickInterval)
+  }, [])
+
+  // Check timers for notifications (every 10 seconds)
   useEffect(() => {
     if ('Notification' in window) {
       setNotificationPermission(Notification.permission)
@@ -147,10 +162,12 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
       await requestNotificationPermission()
     }
 
+    const now = Date.now()
     const newTimer: Timer = {
-      id: Date.now().toString(),
+      id: now.toString(),
       name: newTimerName.trim(),
-      endTime: Date.now() + mins * 60 * 1000,
+      startTime: now,
+      endTime: now + mins * 60 * 1000,
       volume: newTimerVolume,
       notified5min: false,
     }
@@ -170,7 +187,6 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
     }
   }
 
-  // Exposed via ref — uses timersRef to avoid stale closure
   const addTimerFromCalculation = useCallback(async (
     volume: string,
     totalMinutes: number,
@@ -187,11 +203,13 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
         await requestNotificationPermission()
       }
 
+      const now = Date.now()
       const timerName = name || `点滴 ${volume}mL (${totalMinutes}分)`
       const newTimer: Timer = {
-        id: Date.now().toString(),
+        id: now.toString(),
         name: timerName,
-        endTime: Date.now() + totalMinutes * 60 * 1000,
+        startTime: now,
+        endTime: now + totalMinutes * 60 * 1000,
         volume,
         notified5min: false,
       }
@@ -218,84 +236,128 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
     saveTimersToStorage(updated)
   }
 
-  const formatTimeLeft = (endTime: number) => {
+  const getProgress = (timer: Timer) => {
+    const total = timer.endTime - timer.startTime
+    const elapsed = Date.now() - timer.startTime
+    return Math.min(Math.max(elapsed / total, 0), 1)
+  }
+
+  const formatEndTime = (endTime: number) => {
+    return new Date(endTime).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  const formatCountdown = (endTime: number) => {
     const diff = endTime - Date.now()
     if (diff <= 0) return '終了'
     const h = Math.floor(diff / (1000 * 60 * 60))
     const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-    return h > 0 ? `残り ${h}時間${m}分` : `残り ${m}分`
+    const s = Math.floor((diff % (1000 * 60)) / 1000)
+    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+    return `${m}:${s.toString().padStart(2, '0')}`
   }
 
   return (
-    <div className="bg-white rounded-3xl shadow-lg p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-          <Clock className="w-5 h-5 text-mint-500" />
-          マルチタイマー
-        </h3>
-        <div className="flex items-center gap-2">
-          {notificationPermission !== 'granted' && (
-            <button
-              onClick={requestNotificationPermission}
-              className="text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-full hover:bg-amber-200 transition-colors flex items-center gap-1"
-            >
-              <Bell className="w-3 h-3" />
-              通知を有効化
-            </button>
-          )}
-          <span className="text-xs text-gray-500">{timers.length}/{MAX_TIMERS} 件実行中</span>
-        </div>
-      </div>
-
+    <div className="space-y-3">
       {timers.length > 0 && (
-        <div className="space-y-2 max-h-60 overflow-y-auto">
-          {timers.map((timer) => (
-            <div
-              key={timer.id}
-              className="bg-mint-50 border-2 border-mint-200 rounded-2xl p-3 flex items-center justify-between"
-            >
-              <div className="flex-1">
-                <p className="font-medium text-gray-800">{timer.name}</p>
-                <p className="text-sm text-gray-600">
-                  {timer.volume}mL · {formatTimeLeft(timer.endTime)}
-                </p>
-              </div>
-              <button
-                onClick={() => deleteTimer(timer.id)}
-                className="p-2 hover:bg-red-100 text-red-600 rounded-xl transition-colors"
+        <div className="space-y-3">
+          {timers.map((timer) => {
+            const progress = getProgress(timer)
+            const isNearEnd = progress > 0.9
+            return (
+              <div
+                key={timer.id}
+                className={`bg-white rounded-2xl shadow-sm border p-4 transition-colors ${
+                  isNearEnd ? 'border-red-200 bg-red-50/30' : 'border-gray-100'
+                }`}
               >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
+                {/* Top row: name + delete */}
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-800 text-sm truncate">{timer.name}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{timer.volume}mL</p>
+                  </div>
+                  <button
+                    onClick={() => deleteTimer(timer.id)}
+                    className="p-1.5 -mr-1 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-lg transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* End time — prominent display */}
+                <div className="flex items-baseline justify-between mb-2">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-bold text-gray-800 tabular-nums">
+                      {formatEndTime(timer.endTime)}
+                    </span>
+                    <span className="text-xs text-gray-500">終了</span>
+                  </div>
+                  <span className={`text-sm font-mono tabular-nums ${
+                    isNearEnd ? 'text-red-500 font-semibold' : 'text-gray-500'
+                  }`}>
+                    残 {formatCountdown(timer.endTime)}
+                  </span>
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-1000 ease-linear ${
+                      isNearEnd
+                        ? 'bg-gradient-to-r from-red-400 to-red-500'
+                        : 'bg-gradient-to-r from-mint-400 to-mint-500'
+                    }`}
+                    style={{ width: `${progress * 100}%` }}
+                  />
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 
       {timers.length === 0 && (
-        <div className="text-center py-8 text-gray-400">
-          <Clock className="w-12 h-12 mx-auto mb-2 opacity-30" />
-          <p className="text-sm">タイマーはまだ登録されていません</p>
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 text-center py-10">
+          <Clock className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+          <p className="text-sm text-gray-400">タイマーはまだ登録されていません</p>
         </div>
       )}
 
+      {/* Notification banner */}
+      {notificationPermission !== 'granted' && (
+        <button
+          onClick={requestNotificationPermission}
+          className="w-full text-sm bg-amber-50 text-amber-700 px-4 py-2.5 rounded-xl hover:bg-amber-100 transition-colors flex items-center justify-center gap-2"
+        >
+          <Bell className="w-4 h-4" />
+          <span className="whitespace-nowrap">通知を有効にする（終了5分前にお知らせ）</span>
+        </button>
+      )}
+
+      {/* Add timer button */}
       <button
         onClick={() => setIsAddingTimer(true)}
         disabled={timers.length >= MAX_TIMERS}
-        className={`w-full font-medium py-3 px-4 rounded-2xl transition-all tap-highlight-transparent active:scale-95 transform flex items-center justify-center gap-2 ${
+        className={`w-full font-medium py-3 px-4 rounded-2xl transition-all tap-highlight-transparent active:scale-[0.98] transform flex items-center justify-center gap-2 text-sm ${
           timers.length >= MAX_TIMERS
-            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
             : 'bg-mint-300 hover:bg-mint-400 text-mint-800'
         }`}
       >
-        <Plus className="w-5 h-5" />
-        {timers.length >= MAX_TIMERS ? `上限${MAX_TIMERS}件に達しています` : '新しいタイマーを追加'}
+        <Plus className="w-4 h-4" />
+        <span className="whitespace-nowrap">
+          {timers.length >= MAX_TIMERS ? `上限${MAX_TIMERS}件に達しています` : '手動でタイマーを追加'}
+        </span>
       </button>
 
+      <p className="text-center text-xs text-gray-400">{timers.length}/{MAX_TIMERS} 件</p>
+
+      {/* Add Timer Modal */}
       {isAddingTimer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-sm w-full p-5 space-y-4 mb-safe">
             <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold text-gray-800">タイマーを追加</h3>
+              <h3 className="text-lg font-bold text-gray-800">タイマーを追加</h3>
               <button
                 onClick={() => {
                   setIsAddingTimer(false)
@@ -303,54 +365,52 @@ const MultiTimer = forwardRef<MultiTimerRef, MultiTimerProps>(({ onToast }, ref)
                   setNewTimerVolume('')
                   setNewTimerMinutes('')
                 }}
-                className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
 
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">タイマー名</label>
+                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">タイマー名</label>
                 <input
                   type="text"
                   value={newTimerName}
                   onChange={(e) => setNewTimerName(e.target.value)}
                   placeholder="例: ベッド3 田中様"
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-2xl focus:border-mint-400 focus:ring-4 focus:ring-mint-100 outline-none transition-all"
+                  className="w-full px-4 py-3 text-sm border-2 border-gray-200 rounded-xl focus:border-mint-400 focus:ring-2 focus:ring-mint-100 outline-none transition-all"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">輸液量 (mL)</label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={newTimerVolume}
-                  onChange={(e) => setNewTimerVolume(e.target.value)}
-                  placeholder="500"
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-2xl focus:border-mint-400 focus:ring-4 focus:ring-mint-100 outline-none transition-all"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">輸液量 (mL)</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={newTimerVolume}
+                    onChange={(e) => setNewTimerVolume(e.target.value)}
+                    placeholder="500"
+                    className="w-full px-4 py-3 text-sm border-2 border-gray-200 rounded-xl focus:border-mint-400 focus:ring-2 focus:ring-mint-100 outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">時間 (分)</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={newTimerMinutes}
+                    onChange={(e) => setNewTimerMinutes(e.target.value)}
+                    placeholder="60"
+                    className="w-full px-4 py-3 text-sm border-2 border-gray-200 rounded-xl focus:border-mint-400 focus:ring-2 focus:ring-mint-100 outline-none transition-all"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">終了までの時間 (分)</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={newTimerMinutes}
-                  onChange={(e) => setNewTimerMinutes(e.target.value)}
-                  placeholder="60"
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-2xl focus:border-mint-400 focus:ring-4 focus:ring-mint-100 outline-none transition-all"
-                />
-              </div>
-            </div>
-
-            <div className="bg-amber-50 border-l-4 border-amber-400 p-3 rounded-xl text-sm text-amber-900">
-              <p><strong>通知:</strong> 終了5分前と終了時に通知が届きます</p>
             </div>
 
             <button
               onClick={addTimer}
-              className="w-full bg-mint-500 hover:bg-mint-600 text-white font-semibold py-3 px-6 rounded-2xl transition-colors tap-highlight-transparent active:scale-95 transform"
+              className="w-full bg-mint-500 hover:bg-mint-600 text-white font-semibold py-3 px-6 rounded-xl transition-colors tap-highlight-transparent active:scale-[0.98] transform text-sm"
             >
               タイマーを開始
             </button>

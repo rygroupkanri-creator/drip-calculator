@@ -31,7 +31,7 @@ export default function Home() {
   }, [])
 
   return (
-    <main className="min-h-screen flex flex-col pb-20">
+    <main className="min-h-screen flex flex-col pb-nav">
       {/* Toast Notification */}
       {toast && (
         <Toast
@@ -44,82 +44,75 @@ export default function Home() {
 
       {/* Tab Content — Always mounted to preserve state */}
       <div className="flex-1 relative">
-        {/* Calculator Tab */}
         <div className={activeTab === 'calculator' ? 'block' : 'hidden'}>
           <Calculator multiTimerRef={multiTimerRef} onToast={showToast} />
         </div>
 
-        {/* Timers Tab */}
         <div className={activeTab === 'timers' ? 'block' : 'hidden'}>
-          <div className="container mx-auto px-4 py-6 max-w-2xl">
-            <div className="text-center space-y-3 py-6 mb-6">
-              <div className="flex items-center justify-center gap-3">
-                <Clock className="w-10 h-10 text-mint-500" />
-                <h1 className="text-4xl font-bold text-gray-800">タイマー一覧</h1>
+          <div className="container mx-auto px-4 pt-4 pb-6 max-w-2xl">
+            <div className="text-center py-4 mb-4">
+              <div className="flex items-center justify-center gap-2">
+                <Clock className="w-7 h-7 text-mint-500" />
+                <h1 className="text-2xl font-bold text-gray-800">タイマー一覧</h1>
               </div>
-              <p className="text-gray-600 text-lg">
-                登録中のタイマーと履歴
-              </p>
+              <p className="text-gray-500 text-sm mt-1">登録中のタイマーと履歴</p>
             </div>
             <MultiTimer ref={multiTimerRef} onToast={showToast} />
           </div>
         </div>
 
-        {/* Voice Memo Tab */}
         <div className={activeTab === 'voice' ? 'block' : 'hidden'}>
-          <div className="container mx-auto px-4 py-6 max-w-2xl">
-            <div className="text-center space-y-3 py-6 mb-6">
-              <div className="flex items-center justify-center gap-3">
-                <Mic className="w-10 h-10 text-sakura-400" />
-                <h1 className="text-4xl font-bold text-gray-800">音声メモ</h1>
+          <div className="container mx-auto px-4 pt-4 pb-6 max-w-2xl">
+            <div className="text-center py-4 mb-4">
+              <div className="flex items-center justify-center gap-2">
+                <Mic className="w-7 h-7 text-sakura-400" />
+                <h1 className="text-2xl font-bold text-gray-800">音声メモ</h1>
               </div>
-              <p className="text-gray-600 text-lg">
-                電子カルテ入力の下書きに
-              </p>
+              <p className="text-gray-500 text-sm mt-1">電子カルテ入力の下書きに</p>
             </div>
             <VoiceMemo onToast={showToast} />
           </div>
         </div>
       </div>
 
-      {/* Fixed Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-greige-300 shadow-lg z-50">
+      {/* Fixed Bottom Navigation — iOS-style slim design */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 z-50 pb-safe">
         <div className="container mx-auto max-w-2xl">
-          <div className="grid grid-cols-3">
+          <div className="grid grid-cols-3 h-[56px]">
             <button
               onClick={() => setActiveTab('calculator')}
-              className={`py-4 px-2 flex flex-col items-center justify-center gap-1 transition-all duration-200 tap-highlight-transparent ${
+              className={`flex flex-col items-center justify-center gap-0.5 transition-colors duration-150 tap-highlight-transparent ${
                 activeTab === 'calculator'
-                  ? 'bg-gradient-to-t from-sakura-100 to-white text-sakura-600 border-t-4 border-sakura-500'
-                  : 'text-gray-500 hover:bg-greige-100'
+                  ? 'text-sakura-500'
+                  : 'text-gray-400 active:text-gray-600'
               }`}
             >
-              <CalcIcon className="w-6 h-6" />
-              <span className="text-xs font-semibold">計算・リズム</span>
+              <CalcIcon className="w-5 h-5" />
+              <span className="text-[10px] font-medium whitespace-nowrap">計算</span>
             </button>
 
             <button
               onClick={() => setActiveTab('timers')}
-              className={`py-4 px-2 flex flex-col items-center justify-center gap-1 transition-all duration-200 tap-highlight-transparent ${
+              className={`flex flex-col items-center justify-center gap-0.5 transition-colors duration-150 tap-highlight-transparent ${
                 activeTab === 'timers'
-                  ? 'bg-gradient-to-t from-mint-100 to-white text-mint-600 border-t-4 border-mint-500'
-                  : 'text-gray-500 hover:bg-greige-100'
+                  ? 'text-mint-500'
+                  : 'text-gray-400 active:text-gray-600'
               }`}
             >
-              <Clock className="w-6 h-6" />
-              <span className="text-xs font-semibold">タイマー</span>
+              <Clock className="w-5 h-5" />
+              <span className="text-[10px] font-medium whitespace-nowrap">タイマー</span>
             </button>
 
             <button
               onClick={() => setActiveTab('voice')}
-              className={`py-4 px-2 flex flex-col items-center justify-center gap-1 transition-all duration-200 tap-highlight-transparent ${
+              className={`flex flex-col items-center justify-center gap-0.5 transition-colors duration-150 tap-highlight-transparent ${
                 activeTab === 'voice'
-                  ? 'bg-gradient-to-t from-sakura-100 to-white text-sakura-600 border-t-4 border-sakura-400'
-                  : 'text-gray-500 hover:bg-greige-100'
+                  ? 'text-sakura-500'
+                  : 'text-gray-400 active:text-gray-600'
               }`}
             >
-              <Mic className="w-6 h-6" />
-              <span className="text-xs font-semibold">音声メモ</span>
+              <Mic className="w-5 h-5" />
+              <span className="text-[10px] font-medium whitespace-nowrap">メモ</span>
             </button>
           </div>
         </div>

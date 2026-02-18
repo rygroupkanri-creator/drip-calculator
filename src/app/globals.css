@@ -5,10 +5,14 @@
 @layer base {
   html {
     @apply antialiased;
+    /* iOS safe area support */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
 
   body {
     @apply bg-greige text-gray-800;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
@@ -16,4 +20,32 @@
   .tap-highlight-transparent {
     -webkit-tap-highlight-color: transparent;
   }
+
+  /* iOS safe area bottom padding */
+  .pb-safe {
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 0px);
+  }
+
+  .mb-safe {
+    margin-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Bottom nav height + safe area for content offset */
+  .pb-nav {
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Pulsing record button animation */
+@keyframes recording-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(239, 68, 68, 0);
+  }
+}
+
+.animate-recording-pulse {
+  animation: recording-pulse 1.5s ease-in-out infinite;
 }

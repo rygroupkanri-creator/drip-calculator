@@ -101,38 +101,31 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
       <DisclaimerModal onAccept={handleDisclaimerAccept} />
 
       {hasAcceptedDisclaimer && (
-        <div className="flex-1 container mx-auto px-4 py-6 max-w-2xl space-y-6">
+        <div className="flex-1 container mx-auto px-4 pt-4 pb-6 max-w-2xl space-y-5">
           {/* Header */}
-          <div className="text-center space-y-3 py-6">
-            <div className="flex items-center justify-center gap-3 flex-wrap">
-              <Droplets className="w-10 h-10 text-sakura-500" />
-              <div>
-                <div className="flex items-center gap-2 justify-center">
-                  <h1 className="text-4xl font-bold text-gray-800">
-                    点滴滴下計算機
-                  </h1>
-                  <span className="bg-gradient-to-r from-sakura-400 to-sakura-500 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-lg">
-                    <Sparkles className="w-3 h-3" />
-                    Ver.3.0α
-                  </span>
-                </div>
-              </div>
+          <div className="text-center space-y-1.5 py-4">
+            <div className="flex items-center justify-center gap-2">
+              <Droplets className="w-7 h-7 text-sakura-500" />
+              <h1 className="text-2xl font-bold text-gray-800 whitespace-nowrap">
+                点滴滴下計算機
+              </h1>
+              <span className="bg-gradient-to-r from-sakura-400 to-sakura-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm">
+                <Sparkles className="w-2.5 h-2.5" />
+                3.1
+              </span>
             </div>
-            <p className="text-gray-600 text-lg">
-              高精度な滴下数計算とリズムガイド
-            </p>
-            <p className="text-sm text-gray-500">
-              R.Y. Group 公式アプリ
+            <p className="text-gray-500 text-sm">
+              R.Y. Group 公式
             </p>
           </div>
 
           {/* Calculator Form */}
-          <div className="bg-white rounded-3xl shadow-lg p-6 space-y-6 border-2 border-greige-300">
+          <div className="bg-white rounded-2xl shadow-sm p-5 space-y-5 border border-gray-100">
             {/* Volume Input */}
             <div className="space-y-2">
               <label
                 htmlFor="volume"
-                className="block text-sm font-semibold text-gray-700 uppercase tracking-wide"
+                className="block text-sm font-bold text-gray-800 tracking-wide"
               >
                 総輸液量 (mL)
               </label>
@@ -144,7 +137,7 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
                   value={volume}
                   onChange={(e) => handleNumberInput(e.target.value, setVolume)}
                   placeholder="輸液量を入力"
-                  className="w-full px-6 py-4 text-2xl font-semibold border-2 border-greige-400 rounded-3xl focus:border-sakura-400 focus:ring-4 focus:ring-sakura-100 outline-none transition-all tap-highlight-transparent bg-greige-50"
+                  className="w-full px-5 py-3.5 text-xl font-semibold border-2 border-gray-200 rounded-2xl focus:border-sakura-400 focus:ring-2 focus:ring-sakura-100 outline-none transition-all tap-highlight-transparent bg-white"
                 />
                 <div className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
                   mL
@@ -154,7 +147,7 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
 
             {/* Duration Inputs */}
             <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700 uppercase tracking-wide">
+              <label className="block text-sm font-bold text-gray-800 tracking-wide">
                 <Clock className="w-4 h-4 inline mr-1" />
                 予定時間
               </label>
@@ -166,7 +159,7 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
                     value={hours}
                     onChange={(e) => handleNumberInput(e.target.value, setHours, false)}
                     placeholder="時間"
-                    className="w-full px-6 py-4 text-2xl font-semibold border-2 border-greige-400 rounded-3xl focus:border-sakura-400 focus:ring-4 focus:ring-sakura-100 outline-none transition-all tap-highlight-transparent bg-greige-50"
+                    className="w-full px-5 py-3.5 text-xl font-semibold border-2 border-gray-200 rounded-2xl focus:border-sakura-400 focus:ring-2 focus:ring-sakura-100 outline-none transition-all tap-highlight-transparent bg-white"
                   />
                   <p className="text-xs text-gray-500 mt-1 text-center">時間</p>
                 </div>
@@ -177,7 +170,7 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
                     value={minutes}
                     onChange={(e) => handleNumberInput(e.target.value, setMinutes, false)}
                     placeholder="分"
-                    className="w-full px-6 py-4 text-2xl font-semibold border-2 border-greige-400 rounded-3xl focus:border-sakura-400 focus:ring-4 focus:ring-sakura-100 outline-none transition-all tap-highlight-transparent bg-greige-50"
+                    className="w-full px-5 py-3.5 text-xl font-semibold border-2 border-gray-200 rounded-2xl focus:border-sakura-400 focus:ring-2 focus:ring-sakura-100 outline-none transition-all tap-highlight-transparent bg-white"
                   />
                   <p className="text-xs text-gray-500 mt-1 text-center">分</p>
                 </div>
@@ -186,7 +179,7 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
 
             {/* Drop Factor Toggle */}
             <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700 uppercase tracking-wide">
+              <label className="block text-sm font-bold text-gray-800 tracking-wide">
                 滴下セット (滴/mL)
               </label>
               <div className="grid grid-cols-2 gap-4">
@@ -225,7 +218,7 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
 
           {/* Results Display */}
           {calculations && (
-            <div className="bg-gradient-to-br from-sakura-400 to-sakura-500 rounded-3xl shadow-xl p-6 text-white space-y-4 border-2 border-sakura-300">
+            <div className="bg-gradient-to-br from-sakura-400 to-sakura-500 rounded-2xl shadow-lg p-5 text-white space-y-4">
               <div className="flex items-center gap-2 mb-2">
                 <CalcIcon className="w-6 h-6" />
                 <h2 className="text-xl font-bold">計算結果</h2>
@@ -258,7 +251,7 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
               {multiTimerRef && (
                 <button
                   onClick={handleStartTimer}
-                  className="w-full py-3.5 px-6 rounded-3xl font-bold bg-white text-pink-600 hover:bg-pink-50 border-2 border-pink-200 transition-all duration-200 tap-highlight-transparent active:scale-95 transform flex items-center justify-center gap-2 shadow-lg"
+                  className="w-full py-3.5 px-6 rounded-2xl font-bold bg-pink-500 text-white hover:bg-pink-600 transition-all duration-200 tap-highlight-transparent active:scale-[0.98] transform flex items-center justify-center gap-2 shadow-lg whitespace-nowrap"
                 >
                   <Timer className="w-5 h-5" />
                   この内容でタイマーを開始
@@ -280,9 +273,9 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
           )}
 
           {/* Footer */}
-          <footer className="text-center py-8 space-y-3 mt-8">
-            <div className="bg-white rounded-3xl shadow-lg p-6 border-2 border-greige-300">
-              <p className="text-sm text-gray-700 mb-2 font-medium">
+          <footer className="text-center py-6 mt-4">
+            <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
+              <p className="text-sm text-gray-700 font-medium">
                 Produced by{' '}
                 <a
                   href="#"
@@ -291,14 +284,9 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
                   R.Y. Group
                 </a>
               </p>
-              <p className="text-xs text-gray-500">
-                医療技術専門職を募集しています
+              <p className="text-xs text-gray-400 mt-3">
+                Ver.3.1 | © 2026 R.Y. Group
               </p>
-              <div className="mt-4 pt-4 border-t border-greige-300">
-                <p className="text-xs text-gray-400">
-                  Ver.3.0α Official Release | © 2026 R.Y. Group
-                </p>
-              </div>
             </div>
           </footer>
         </div>

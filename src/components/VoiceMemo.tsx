@@ -28,6 +28,7 @@ interface SpeechRecognitionInstance extends EventTarget {
   interimResults: boolean
   start: () => void
   stop: () => void
+  abort: () => void
   onresult: ((event: SpeechRecognitionEvent) => void) | null
   onerror: ((event: SpeechRecognitionErrorEvent) => void) | null
   onend: (() => void) | null
@@ -53,6 +54,13 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
   const [interimText, setInterimText] = useState('')
   const [isSupported, setIsSupported] = useState(true)
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
+  const isStoppingRef = useRef(false)
+  const currentTextRef = useRef('')
+
+  // Keep ref in sync with state for use in callbacks
+  useEffect(() => {
+    currentTextRef.current = currentText
+  }, [currentText])
 
   // Load memos from localStorage
   useEffect(() => {
@@ -83,10 +91,28 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
     }
   }, [])
 
+  const saveCurrentMemo = useCallback((text: string, currentMemos: Memo[]) => {
+    const finalText = text.trim()
+    if (finalText) {
+      const newMemo: Memo = {
+        id: Date.now().toString(),
+        text: finalText,
+        createdAt: Date.now(),
+      }
+      const updated = [newMemo, ...currentMemos].slice(0, MAX_MEMOS)
+      saveMemos(updated)
+      if (onToast) {
+        onToast('音声メモを保存しました')
+      }
+    }
+  }, [saveMemos, onToast])
+
   const startRecording = useCallback(() => {
     const win = window as WindowWithSpeech
     const SpeechRecognitionClass = win.SpeechRecognition || win.webkitSpeechRecognition
     if (!SpeechRecognitionClass) return
+
+    isStoppingRef.current = false
 
     const recognition = new SpeechRecognitionClass()
     recognition.lang = 'ja-JP'
@@ -115,15 +141,20 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
       if (event.error === 'not-allowed') {
         alert('マイクへのアクセスが拒否されました。ブラウザ設定でマイクの使用を許可してください。')
       }
+      // On error, clean up
+      isStoppingRef.current = true
+      recognitionRef.current = null
       setIsRecording(false)
     }
 
     recognition.onend = () => {
-      // Auto restart if still recording (browser sometimes stops)
-      if (recognitionRef.current) {
+      // Only auto-restart if NOT intentionally stopping
+      if (!isStoppingRef.current && recognitionRef.current) {
         try {
           recognitionRef.current.start()
         } catch {
+          // Failed to restart — clean up
+          recognitionRef.current = null
           setIsRecording(false)
         }
       }
@@ -137,30 +168,26 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
   }, [])
 
   const stopRecording = useCallback(() => {
+    // Set stopping flag FIRST to prevent onend from restarting
+    isStoppingRef.current = true
+
     if (recognitionRef.current) {
       const ref = recognitionRef.current
-      recognitionRef.current = null // Prevent auto-restart
-      ref.stop()
+      recognitionRef.current = null
+      try {
+        ref.abort() // Use abort() instead of stop() for immediate halt
+      } catch {
+        // Ignore errors during abort
+      }
     }
+
     setIsRecording(false)
 
-    // Save memo if there's text
-    const finalText = currentText.trim()
-    if (finalText) {
-      const newMemo: Memo = {
-        id: Date.now().toString(),
-        text: finalText,
-        createdAt: Date.now(),
-      }
-      const updated = [newMemo, ...memos].slice(0, MAX_MEMOS)
-      saveMemos(updated)
-      if (onToast) {
-        onToast('音声メモを保存しました')
-      }
-    }
+    // Save memo using ref to get latest text
+    saveCurrentMemo(currentTextRef.current, memos)
     setCurrentText('')
     setInterimText('')
-  }, [currentText, memos, saveMemos, onToast])
+  }, [memos, saveCurrentMemo])
 
   const deleteMemo = useCallback((id: string) => {
     const updated = memos.filter((m) => m.id !== id)
@@ -174,7 +201,6 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
         onToast('クリップボードにコピーしました')
       }
     } catch {
-      // Fallback for older browsers
       const textarea = document.createElement('textarea')
       textarea.value = text
       document.body.appendChild(textarea)
@@ -198,12 +224,12 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
 
   if (!isSupported) {
     return (
-      <div className="bg-white rounded-3xl shadow-lg p-6 space-y-4">
-        <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+      <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
+        <h3 className="text-base font-semibold text-gray-800 flex items-center gap-2 mb-3">
           <Mic className="w-5 h-5 text-sakura-400" />
           音声メモ
         </h3>
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm text-amber-800">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
           <p>お使いのブラウザは Web Speech API に対応していません。</p>
           <p className="mt-1">Google Chrome の最新版をご利用ください。</p>
         </div>
@@ -212,115 +238,107 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Recording Card */}
-      <div className="bg-white rounded-3xl shadow-lg p-6 space-y-4">
-        <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-          <Mic className="w-5 h-5 text-sakura-400" />
-          音声メモ
-        </h3>
-        <p className="text-sm text-gray-500">
-          話した内容をリアルタイムでテキスト化します
-        </p>
+      <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100 space-y-4">
+        <div>
+          <h3 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+            <Mic className="w-5 h-5 text-sakura-400" />
+            音声入力
+          </h3>
+          <p className="text-xs text-gray-500 mt-0.5">
+            話した内容をリアルタイムでテキスト化
+          </p>
+        </div>
 
         {/* Live Transcript Area */}
-        <div className={`min-h-[120px] rounded-2xl p-4 border-2 transition-colors ${
+        <div className={`min-h-[100px] rounded-xl p-4 border-2 transition-colors ${
           isRecording
-            ? 'bg-sakura-50 border-sakura-300'
-            : 'bg-greige-50 border-greige-300'
+            ? 'bg-red-50/50 border-red-200'
+            : 'bg-gray-50 border-gray-100'
         }`}>
           {isRecording ? (
             <div className="space-y-1">
               {currentText && (
-                <p className="text-gray-800 leading-relaxed">{currentText}</p>
+                <p className="text-gray-800 text-sm leading-relaxed">{currentText}</p>
               )}
               {interimText && (
-                <p className="text-sakura-400 leading-relaxed">{interimText}</p>
+                <p className="text-sakura-400 text-sm leading-relaxed">{interimText}</p>
               )}
               {!currentText && !interimText && (
-                <p className="text-gray-400 text-sm">マイクに向かって話してください...</p>
+                <p className="text-gray-400 text-xs text-center pt-6">マイクに向かって話してください...</p>
               )}
             </div>
           ) : (
-            <p className="text-gray-400 text-sm text-center pt-8">
-              「録音開始」ボタンを押してください
+            <p className="text-gray-400 text-xs text-center pt-6">
+              録音ボタンを押して開始
             </p>
           )}
         </div>
 
-        {/* Recording Indicator */}
-        {isRecording && (
-          <div className="flex items-center justify-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-sm font-medium text-red-600">録音中...</span>
-          </div>
-        )}
-
-        {/* Control Buttons */}
+        {/* Control Button — pulsing red when recording */}
         <button
           onClick={isRecording ? stopRecording : startRecording}
-          className={`w-full py-4 px-6 rounded-3xl font-semibold text-white transition-all duration-200 tap-highlight-transparent active:scale-95 transform flex items-center justify-center gap-2 shadow-lg ${
+          className={`w-full py-3.5 px-6 rounded-2xl font-semibold text-white transition-all duration-200 tap-highlight-transparent active:scale-[0.98] transform flex items-center justify-center gap-2 text-sm ${
             isRecording
-              ? 'bg-gradient-to-r from-red-400 to-red-500 hover:from-red-500 hover:to-red-600'
-              : 'bg-gradient-to-r from-sakura-400 to-sakura-500 hover:from-sakura-500 hover:to-sakura-600'
+              ? 'bg-red-500 hover:bg-red-600 animate-recording-pulse'
+              : 'bg-gradient-to-r from-sakura-400 to-sakura-500 hover:from-sakura-500 hover:to-sakura-600 shadow-sm'
           }`}
         >
           {isRecording ? (
             <>
               <MicOff className="w-5 h-5" />
-              録音を停止して保存
+              <span className="whitespace-nowrap">録音を停止して保存</span>
             </>
           ) : (
             <>
               <Mic className="w-5 h-5" />
-              録音開始
+              <span className="whitespace-nowrap">録音開始</span>
             </>
           )}
         </button>
       </div>
 
       {/* Saved Memos List */}
-      <div className="bg-white rounded-3xl shadow-lg p-6 space-y-4">
+      <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100 space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+          <h3 className="text-base font-semibold text-gray-800 flex items-center gap-2">
             <FileText className="w-5 h-5 text-mint-500" />
             保存済みメモ
           </h3>
-          <span className="text-xs text-gray-500">{memos.length} 件</span>
+          <span className="text-xs text-gray-400">{memos.length} 件</span>
         </div>
 
         {memos.length === 0 ? (
-          <div className="text-center py-8 text-gray-400">
-            <FileText className="w-12 h-12 mx-auto mb-2 opacity-30" />
-            <p className="text-sm">保存されたメモはありません</p>
+          <div className="text-center py-8">
+            <FileText className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+            <p className="text-sm text-gray-400">保存されたメモはありません</p>
           </div>
         ) : (
-          <div className="space-y-3 max-h-[400px] overflow-y-auto">
+          <div className="space-y-2.5 max-h-[400px] overflow-y-auto">
             {memos.map((memo) => (
               <div
                 key={memo.id}
-                className="bg-greige-100 border-2 border-greige-300 rounded-2xl p-4 space-y-2"
+                className="bg-gray-50 border border-gray-100 rounded-xl p-3.5 space-y-2"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-gray-800 text-sm leading-relaxed flex-1 whitespace-pre-wrap">
-                    {memo.text}
-                  </p>
-                </div>
+                <p className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">
+                  {memo.text}
+                </p>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500">
+                  <span className="text-[11px] text-gray-400">
                     {formatDate(memo.createdAt)}
                   </span>
                   <div className="flex gap-1">
                     <button
                       onClick={() => copyToClipboard(memo.text)}
-                      className="px-3 py-1.5 text-xs font-medium bg-sakura-100 text-sakura-700 hover:bg-sakura-200 rounded-xl transition-colors flex items-center gap-1"
+                      className="px-2.5 py-1 text-[11px] font-medium bg-sakura-50 text-sakura-600 hover:bg-sakura-100 rounded-lg transition-colors flex items-center gap-1"
                     >
                       <Copy className="w-3 h-3" />
-                      コピー
+                      <span className="whitespace-nowrap">コピー</span>
                     </button>
                     <button
                       onClick={() => deleteMemo(memo.id)}
-                      className="p-1.5 text-red-500 hover:bg-red-100 rounded-xl transition-colors"
+                      className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
