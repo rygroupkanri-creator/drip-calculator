@@ -1,6 +1,6 @@
 {
   "name": "drip-rate-calculator",
-  "version": "3.4.0-alpha",
+  "version": "3.5.0",
   "description": "R.Y. Group Official - High-performance Drip Rate Calculator with Advanced Features",
   "private": true,
   "scripts": {

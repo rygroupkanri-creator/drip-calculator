@@ -1,13 +1,13 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Volume2, VolumeX, Play, Pause, Vibrate, Clock } from 'lucide-react'
+import { Volume2, VolumeX, Play, Pause, Vibrate, Clock, Droplets } from 'lucide-react'
 
 interface MetronomeProps {
   intervalMs: number // Time between beats in milliseconds
   isRunning: boolean
   onToggle: () => void
-  onStartTimer?: () => void // Callback to start timer with current calculation
+  onStartTimer?: () => void
   volume?: string
   totalMinutes?: number
 }
@@ -17,6 +17,10 @@ export default function Metronome({ intervalMs, isRunning, onToggle, onStartTime
   const [isVibrationEnabled, setIsVibrationEnabled] = useState(false)
   const [isPulsing, setIsPulsing] = useState(false)
   const [hasVibrationSupport, setHasVibrationSupport] = useState(false)
+
+  // Drip animation state
+  const [dripKey, setDripKey] = useState(0) // Increment to trigger new drop
+  const [showRipple, setShowRipple] = useState(false)
 
   const audioContextRef = useRef<AudioContext | null>(null)
   const nextBeatTimeRef = useRef<number>(0)
@@ -28,7 +32,6 @@ export default function Metronome({ intervalMs, isRunning, onToggle, onStartTime
       const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext
       audioContextRef.current = new AudioContextClass()
 
-      // Check if vibration API is supported
       if ('vibrate' in navigator) {
         setHasVibrationSupport(true)
       }
@@ -45,7 +48,6 @@ export default function Metronome({ intervalMs, isRunning, onToggle, onStartTime
     if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
       try {
         await audioContextRef.current.resume()
-        console.log('AudioContext resumed successfully')
       } catch (error) {
         console.error('Failed to resume AudioContext:', error)
       }
@@ -54,11 +56,9 @@ export default function Metronome({ intervalMs, isRunning, onToggle, onStartTime
 
   // Play beat sound using Web Audio API for precision
   const playBeat = useCallback(() => {
-    // Play sound
     if (audioContextRef.current && isSoundEnabled) {
       const context = audioContextRef.current
 
-      // Ensure context is running
       if (context.state === 'suspended') {
         context.resume().catch(err => console.error('AudioContext resume error:', err))
       }
@@ -73,7 +73,6 @@ export default function Metronome({ intervalMs, isRunning, onToggle, onStartTime
       oscillator.frequency.value = 800
       oscillator.type = 'sine'
 
-      // Quick attack and decay for crisp sound
       gainNode.gain.setValueAtTime(0, context.currentTime)
       gainNode.gain.linearRampToValueAtTime(0.3, context.currentTime + 0.01)
       gainNode.gain.linearRampToValueAtTime(0, context.currentTime + 0.1)
@@ -82,18 +81,15 @@ export default function Metronome({ intervalMs, isRunning, onToggle, onStartTime
       oscillator.stop(context.currentTime + 0.1)
     }
 
-    // Vibrate device
     if (isVibrationEnabled && 'vibrate' in navigator) {
-      navigator.vibrate(50) // Short 50ms vibration
+      navigator.vibrate(50)
     }
   }, [isSoundEnabled, isVibrationEnabled])
 
-  // Handle toggle with AudioContext resume and initial vibration
+  // Handle toggle with AudioContext resume
   const handleToggle = useCallback(async () => {
-    // Resume AudioContext on first user interaction
     await resumeAudioContext()
 
-    // If starting, trigger initial vibration
     if (!isRunning && isVibrationEnabled && 'vibrate' in navigator) {
       navigator.vibrate(50)
     }
@@ -101,11 +97,21 @@ export default function Metronome({ intervalMs, isRunning, onToggle, onStartTime
     onToggle()
   }, [resumeAudioContext, isRunning, isVibrationEnabled, onToggle])
 
-  // Trigger visual pulse
-  const triggerPulse = () => {
+  // Trigger visual pulse + drip animation
+  const triggerPulse = useCallback(() => {
     setIsPulsing(true)
     setTimeout(() => setIsPulsing(false), 150)
-  }
+
+    // Trigger new drip drop
+    setDripKey((prev) => prev + 1)
+
+    // Show ripple with delay matching when drop hits bottom
+    const animDuration = Math.min(intervalMs * 0.85, 1200)
+    setTimeout(() => {
+      setShowRipple(true)
+      setTimeout(() => setShowRipple(false), 400)
+    }, animDuration)
+  }, [intervalMs])
 
   // High-precision scheduler using requestAnimationFrame
   useEffect(() => {
@@ -117,23 +123,20 @@ export default function Metronome({ intervalMs, isRunning, onToggle, onStartTime
       return
     }
 
-    const scheduleAheadTime = 0.1 // Schedule 100ms ahead
+    const scheduleAheadTime = 0.1
     nextBeatTimeRef.current = performance.now()
 
     const scheduler = () => {
       const currentTime = performance.now()
 
-      // Check if it's time for the next beat
       while (nextBeatTimeRef.current <= currentTime + scheduleAheadTime * 1000) {
         const beatTime = nextBeatTimeRef.current
 
-        // Schedule beat at precise time
         setTimeout(() => {
           playBeat()
           triggerPulse()
         }, Math.max(0, beatTime - performance.now()))
 
-        // Calculate next beat time
         nextBeatTimeRef.current += intervalMs
       }
 
@@ -148,7 +151,10 @@ export default function Metronome({ intervalMs, isRunning, onToggle, onStartTime
         schedulerIdRef.current = null
       }
     }
-  }, [isRunning, intervalMs, playBeat])
+  }, [isRunning, intervalMs, playBeat, triggerPulse])
+
+  // Compute animation duration from interval (capped)
+  const dripDuration = Math.min(Math.max(intervalMs * 0.9, 400), 1500)
 
   return (
     <div className="bg-white rounded-3xl shadow-lg p-6 space-y-4">
@@ -197,30 +203,79 @@ export default function Metronome({ intervalMs, isRunning, onToggle, onStartTime
 
       {!hasVibrationSupport && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-800">
-          <p>💡 お使いのブラウザは振動機能に非対応です（視覚ガイドをご利用ください）</p>
+          <p>お使いのブラウザは振動機能に非対応です（視覚ガイドをご利用ください）</p>
         </div>
       )}
 
+      {/* Drip Animation Area */}
+      <div className="relative flex items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-b from-sky-50/60 to-blue-50/80 border border-sky-100"
+        style={{ height: '180px' }}
+      >
+        {/* IV tube nozzle at top */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3 h-5 bg-gradient-to-b from-gray-300 to-gray-400 rounded-b-full z-10" />
+
+        {/* Animated falling drop */}
+        {isRunning && (
+          <div
+            key={dripKey}
+            className="absolute left-1/2 -translate-x-1/2 z-20"
+            style={{
+              top: '20px',
+              animation: `drip-fall ${dripDuration}ms ease-in forwards`,
+            }}
+          >
+            <Droplets className="w-5 h-5 text-sky-400 drop-shadow-sm" />
+          </div>
+        )}
+
+        {/* Ripple at bottom */}
+        {showRipple && (
+          <div
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-sky-300/50 z-10"
+            style={{ animation: 'drip-ripple 400ms ease-out forwards' }}
+          />
+        )}
+
+        {/* Water level at bottom */}
+        <div className="absolute bottom-0 left-0 right-0 h-5 bg-gradient-to-t from-sky-200/50 to-transparent rounded-b-2xl" />
+
+        {/* Central indicator when stopped */}
+        {!isRunning && (
+          <div className="flex flex-col items-center gap-2 text-sky-300">
+            <Droplets className="w-8 h-8" />
+            <p className="text-xs text-sky-400 font-medium">リズム開始で滴下表示</p>
+          </div>
+        )}
+
+        {/* BPM overlay when running */}
+        {isRunning && (
+          <div className="absolute top-2.5 right-3 z-30">
+            <span className="text-[10px] font-bold text-sky-500 bg-white/70 rounded-full px-2 py-0.5 backdrop-blur-sm">
+              {(60000 / intervalMs).toFixed(1)} 滴/分
+            </span>
+          </div>
+        )}
+      </div>
+
       {/* Visual Pulse Indicator */}
-      <div className="flex items-center justify-center py-8">
+      <div className="flex items-center justify-center py-4">
         <div className="relative">
           <div
-            className={`w-28 h-28 rounded-full flex items-center justify-center transition-all duration-150 ${
+            className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-150 ${
               isPulsing
                 ? 'bg-gradient-to-br from-sakura-400 to-sakura-500 scale-110 shadow-xl shadow-sakura-300'
                 : 'bg-sakura-100 scale-100'
             }`}
           >
             <div
-              className={`w-20 h-20 rounded-full transition-all duration-150 ${
+              className={`w-14 h-14 rounded-full transition-all duration-150 ${
                 isPulsing ? 'bg-white shadow-lg' : 'bg-sakura-200'
               }`}
             />
           </div>
 
-          {/* Animated ring on pulse */}
           {isPulsing && (
-            <div className="absolute inset-0 w-28 h-28 rounded-full bg-sakura-400 animate-pulse-ring" />
+            <div className="absolute inset-0 w-20 h-20 rounded-full bg-sakura-400 animate-pulse-ring" />
           )}
         </div>
       </div>
@@ -247,7 +302,7 @@ export default function Metronome({ intervalMs, isRunning, onToggle, onStartTime
         )}
       </button>
 
-      {/* Timer Start Button (shown when stopped and onStartTimer is available) */}
+      {/* Timer Start Button */}
       {!isRunning && onStartTimer && volume && totalMinutes && (
         <button
           onClick={onStartTimer}

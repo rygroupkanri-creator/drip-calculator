@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Mic, MicOff, Copy, Trash2, FileText, Pencil, Check, AlertTriangle, AlertCircle, Wand2, X, Sparkles, ListOrdered, MessageSquare, Loader2, Bot } from 'lucide-react'
+import { Mic, MicOff, Copy, Trash2, FileText, Pencil, Check, AlertTriangle, AlertCircle, Wand2, X, Sparkles, ListOrdered, MessageSquare, Loader2, Bot, ClipboardList } from 'lucide-react'
 
 // --- Data types ---
 
@@ -513,6 +513,53 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
     }
   }, [onToast])
 
+  // --- Bulk Report ---
+
+  const generateBulkReport = useCallback(async () => {
+    if (memos.length === 0) return
+
+    const today = new Date()
+    const dateStr = formatTimestamp(today).split(' ')[0] // "2026/02/18"
+
+    const PRIORITY_LABEL: Record<Priority, string> = {
+      normal: '通常',
+      important: '重要',
+      urgent: '至急',
+    }
+
+    const lines: string[] = [
+      `【R.Y. Group 業務メモ報告 - ${dateStr}】`,
+      '────────────────────────────',
+    ]
+
+    for (const memo of memos) {
+      const time = memo.timestamp.split(' ')[1] || '' // "HH:MM"
+      const priorityTag = `【${PRIORITY_LABEL[memo.priority]}】`
+      const aiTag = memo.aiGenerated ? ' [AI整形]' : ''
+      // Collapse newlines in memo text for single-line display
+      const text = memo.text.replace(/\n+/g, ' ').trim()
+      lines.push(`[${time}] ${priorityTag}${aiTag} ${text}`)
+    }
+
+    lines.push('────────────────────────────')
+    lines.push(`合計: ${memos.length}件 | 出力: ${formatTimestamp(new Date())}`)
+
+    const report = lines.join('\n')
+
+    try {
+      await navigator.clipboard.writeText(report)
+      if (onToast) onToast('レポートをコピーしました', `${memos.length}件のメモを一括出力`)
+    } catch {
+      const textarea = document.createElement('textarea')
+      textarea.value = report
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+      if (onToast) onToast('レポートをコピーしました', `${memos.length}件のメモを一括出力`)
+    }
+  }, [memos, onToast])
+
   // --- AI Transform ---
 
   const handleAITransform = useCallback(async (memoId: string, mode: AITransformMode) => {
@@ -642,6 +689,17 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
           </h3>
           <span className="text-xs text-gray-400">{memos.length}/{MAX_MEMOS} 件</span>
         </div>
+
+        {/* Bulk Report Button */}
+        {memos.length > 0 && (
+          <button
+            onClick={generateBulkReport}
+            className="w-full py-2.5 px-4 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 transition-all tap-highlight-transparent active:scale-[0.98] transform flex items-center justify-center gap-2 shadow-md"
+          >
+            <ClipboardList className="w-4 h-4" />
+            <span className="whitespace-nowrap">本日の記録を一括コピー</span>
+          </button>
+        )}
 
         {memos.length === 0 ? (
           <div className="text-center py-8">

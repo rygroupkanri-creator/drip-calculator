@@ -113,7 +113,7 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
               </h1>
               <span className="bg-gradient-to-r from-sakura-400 to-sakura-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm">
                 <Sparkles className="w-2.5 h-2.5" />
-                3.4α
+                3.5
               </span>
             </div>
             <p className="text-gray-500 text-sm">
@@ -301,7 +301,7 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
                 </a>
               </p>
               <p className="text-xs text-gray-400 mt-3">
-                Ver.3.4.0-alpha | © 2026 R.Y. Group
+                Ver.3.5.0 | © 2026 R.Y. Group
               </p>
             </div>
           </footer>
