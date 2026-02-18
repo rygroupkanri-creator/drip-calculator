@@ -105,20 +105,15 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
       {hasAcceptedDisclaimer && (
         <div className="flex-1 container mx-auto px-4 pt-4 pb-6 max-w-2xl space-y-5">
           {/* Header */}
-          <div className="text-center space-y-1.5 py-4">
-            <div className="flex items-center justify-center gap-2">
-              <Droplets className="w-7 h-7 text-sakura-500" />
-              <h1 className="text-2xl font-bold text-gray-800 whitespace-nowrap">
-                点滴滴下計算機
-              </h1>
-              <span className="bg-gradient-to-r from-sakura-400 to-sakura-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm">
-                <Sparkles className="w-2.5 h-2.5" />
-                3.5
-              </span>
-            </div>
-            <p className="text-gray-500 text-sm">
-              R.Y. Group 公式
-            </p>
+          <div className="flex items-center justify-center gap-2.5 py-5">
+            <Droplets className="w-7 h-7 text-sakura-500" />
+            <h1 className="text-2xl font-bold text-gray-800 whitespace-nowrap">
+              点滴滴下計算機
+            </h1>
+            <span className="bg-gradient-to-r from-sakura-400 to-sakura-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm">
+              <Sparkles className="w-2.5 h-2.5" />
+              3.5
+            </span>
           </div>
 
           {/* Calculator Form */}
@@ -301,7 +296,7 @@ export default function Calculator({ multiTimerRef, onToast }: CalculatorProps) 
                 </a>
               </p>
               <p className="text-xs text-gray-400 mt-3">
-                Ver.3.5.0 | © 2026 R.Y. Group
+                Ver.3.5.1 | © 2026 R.Y. Group
               </p>
             </div>
           </footer>
