@@ -1,18 +1,37 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Mic, MicOff, Copy, Trash2, FileText } from 'lucide-react'
+import { Mic, MicOff, Copy, Trash2, FileText, Pencil, Check, AlertTriangle, AlertCircle } from 'lucide-react'
+
+// --- Data types ---
+
+type Priority = 'normal' | 'important' | 'urgent'
 
 interface Memo {
+  id: string
+  text: string
+  timestamp: string   // e.g. "2026/02/18 11:30"
+  priority: Priority
+}
+
+// Migration: old format
+interface LegacyMemo {
   id: string
   text: string
   createdAt: number
 }
 
 const STORAGE_KEY = 'drip-calc-voice-memos'
-const MAX_MEMOS = 30
+const MAX_MEMOS = 50
 
-// Type definitions for Web Speech API
+const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; border: string; bg: string }> = {
+  normal:    { label: '通常', color: 'bg-gray-300',   border: 'border-l-gray-300',   bg: 'bg-gray-50' },
+  important: { label: '重要', color: 'bg-amber-400',  border: 'border-l-amber-400',  bg: 'bg-amber-50/40' },
+  urgent:    { label: '至急', color: 'bg-red-500',    border: 'border-l-red-500',    bg: 'bg-red-50/40' },
+}
+
+// --- Web Speech API types ---
+
 interface SpeechRecognitionEvent extends Event {
   results: SpeechRecognitionResultList
   resultIndex: number
@@ -47,27 +66,61 @@ interface VoiceMemoProps {
   onToast?: (message: string, subMessage?: string) => void
 }
 
+// --- Helpers ---
+
+function formatTimestamp(date: Date): string {
+  const y = date.getFullYear()
+  const mo = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  const h = String(date.getHours()).padStart(2, '0')
+  const mi = String(date.getMinutes()).padStart(2, '0')
+  return `${y}/${mo}/${d} ${h}:${mi}`
+}
+
+function migrateMemo(raw: Memo | LegacyMemo): Memo {
+  if ('timestamp' in raw && 'priority' in raw) {
+    return raw as Memo
+  }
+  const legacy = raw as LegacyMemo
+  return {
+    id: legacy.id,
+    text: legacy.text,
+    timestamp: formatTimestamp(new Date(legacy.createdAt)),
+    priority: 'normal',
+  }
+}
+
+// --- Component ---
+
 export default function VoiceMemo({ onToast }: VoiceMemoProps) {
   const [memos, setMemos] = useState<Memo[]>([])
   const [isRecording, setIsRecording] = useState(false)
   const [currentText, setCurrentText] = useState('')
   const [interimText, setInterimText] = useState('')
   const [isSupported, setIsSupported] = useState(true)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editText, setEditText] = useState('')
+  const [recordingStartTime, setRecordingStartTime] = useState<Date | null>(null)
+
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
   const isStoppingRef = useRef(false)
   const currentTextRef = useRef('')
+  const memosRef = useRef<Memo[]>(memos)
+  const recordingStartRef = useRef<Date | null>(null)
 
-  // Keep ref in sync with state for use in callbacks
-  useEffect(() => {
-    currentTextRef.current = currentText
-  }, [currentText])
+  // Keep refs in sync
+  useEffect(() => { currentTextRef.current = currentText }, [currentText])
+  useEffect(() => { memosRef.current = memos }, [memos])
+  useEffect(() => { recordingStartRef.current = recordingStartTime }, [recordingStartTime])
 
-  // Load memos from localStorage
+  // Load memos from localStorage (with migration)
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved) {
-        setMemos(JSON.parse(saved))
+        const parsed = JSON.parse(saved) as (Memo | LegacyMemo)[]
+        const migrated = parsed.map(migrateMemo)
+        setMemos(migrated)
       }
     } catch (e) {
       console.error('Failed to load memos:', e)
@@ -82,7 +135,7 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
     }
   }, [])
 
-  const saveMemos = useCallback((updated: Memo[]) => {
+  const persistMemos = useCallback((updated: Memo[]) => {
     setMemos(updated)
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
@@ -91,21 +144,7 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
     }
   }, [])
 
-  const saveCurrentMemo = useCallback((text: string, currentMemos: Memo[]) => {
-    const finalText = text.trim()
-    if (finalText) {
-      const newMemo: Memo = {
-        id: Date.now().toString(),
-        text: finalText,
-        createdAt: Date.now(),
-      }
-      const updated = [newMemo, ...currentMemos].slice(0, MAX_MEMOS)
-      saveMemos(updated)
-      if (onToast) {
-        onToast('音声メモを保存しました')
-      }
-    }
-  }, [saveMemos, onToast])
+  // --- Recording ---
 
   const startRecording = useCallback(() => {
     const win = window as WindowWithSpeech
@@ -113,6 +152,8 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
     if (!SpeechRecognitionClass) return
 
     isStoppingRef.current = false
+    const now = new Date()
+    setRecordingStartTime(now)
 
     const recognition = new SpeechRecognitionClass()
     recognition.lang = 'ja-JP'
@@ -121,17 +162,17 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let interim = ''
-      let final = ''
+      let finalStr = ''
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript
         if (event.results[i].isFinal) {
-          final += transcript
+          finalStr += transcript
         } else {
           interim += transcript
         }
       }
-      if (final) {
-        setCurrentText((prev) => prev + final)
+      if (finalStr) {
+        setCurrentText((prev) => prev + finalStr)
       }
       setInterimText(interim)
     }
@@ -141,19 +182,16 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
       if (event.error === 'not-allowed') {
         alert('マイクへのアクセスが拒否されました。ブラウザ設定でマイクの使用を許可してください。')
       }
-      // On error, clean up
       isStoppingRef.current = true
       recognitionRef.current = null
       setIsRecording(false)
     }
 
     recognition.onend = () => {
-      // Only auto-restart if NOT intentionally stopping
       if (!isStoppingRef.current && recognitionRef.current) {
         try {
           recognitionRef.current.start()
         } catch {
-          // Failed to restart — clean up
           recognitionRef.current = null
           setIsRecording(false)
         }
@@ -168,38 +206,82 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
   }, [])
 
   const stopRecording = useCallback(() => {
-    // Set stopping flag FIRST to prevent onend from restarting
     isStoppingRef.current = true
 
     if (recognitionRef.current) {
       const ref = recognitionRef.current
       recognitionRef.current = null
-      try {
-        ref.abort() // Use abort() instead of stop() for immediate halt
-      } catch {
-        // Ignore errors during abort
-      }
+      try { ref.abort() } catch { /* ignore */ }
     }
 
     setIsRecording(false)
 
-    // Save memo using ref to get latest text
-    saveCurrentMemo(currentTextRef.current, memos)
+    // Use refs to get the absolute latest values (avoids stale closure)
+    const text = currentTextRef.current.trim()
+    if (text) {
+      const ts = recordingStartRef.current
+        ? formatTimestamp(recordingStartRef.current)
+        : formatTimestamp(new Date())
+      const newMemo: Memo = {
+        id: Date.now().toString(),
+        text,
+        timestamp: ts,
+        priority: 'normal',
+      }
+      const latest = memosRef.current
+      const updated = [newMemo, ...latest].slice(0, MAX_MEMOS)
+      persistMemos(updated)
+      if (onToast) {
+        onToast('音声メモを保存しました')
+      }
+    }
+
     setCurrentText('')
     setInterimText('')
-  }, [memos, saveCurrentMemo])
+    setRecordingStartTime(null)
+  }, [persistMemos, onToast])
+
+  // --- Memo actions ---
 
   const deleteMemo = useCallback((id: string) => {
-    const updated = memos.filter((m) => m.id !== id)
-    saveMemos(updated)
-  }, [memos, saveMemos])
+    const updated = memosRef.current.filter((m) => m.id !== id)
+    persistMemos(updated)
+  }, [persistMemos])
+
+  const updatePriority = useCallback((id: string, priority: Priority) => {
+    const updated = memosRef.current.map((m) =>
+      m.id === id ? { ...m, priority } : m
+    )
+    persistMemos(updated)
+  }, [persistMemos])
+
+  const startEdit = useCallback((memo: Memo) => {
+    setEditingId(memo.id)
+    setEditText(memo.text)
+  }, [])
+
+  const saveEdit = useCallback(() => {
+    if (!editingId) return
+    const trimmed = editText.trim()
+    if (!trimmed) return
+    const updated = memosRef.current.map((m) =>
+      m.id === editingId ? { ...m, text: trimmed } : m
+    )
+    persistMemos(updated)
+    setEditingId(null)
+    setEditText('')
+    if (onToast) onToast('メモを更新しました')
+  }, [editingId, editText, persistMemos, onToast])
+
+  const cancelEdit = useCallback(() => {
+    setEditingId(null)
+    setEditText('')
+  }, [])
 
   const copyToClipboard = useCallback(async (text: string) => {
     try {
       await navigator.clipboard.writeText(text)
-      if (onToast) {
-        onToast('クリップボードにコピーしました')
-      }
+      if (onToast) onToast('クリップボードにコピーしました')
     } catch {
       const textarea = document.createElement('textarea')
       textarea.value = text
@@ -207,20 +289,11 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
       textarea.select()
       document.execCommand('copy')
       document.body.removeChild(textarea)
-      if (onToast) {
-        onToast('クリップボードにコピーしました')
-      }
+      if (onToast) onToast('クリップボードにコピーしました')
     }
   }, [onToast])
 
-  const formatDate = (timestamp: number) => {
-    const d = new Date(timestamp)
-    const month = d.getMonth() + 1
-    const day = d.getDate()
-    const hours = d.getHours().toString().padStart(2, '0')
-    const minutes = d.getMinutes().toString().padStart(2, '0')
-    return `${month}/${day} ${hours}:${minutes}`
-  }
+  // --- Render ---
 
   if (!isSupported) {
     return (
@@ -251,11 +324,9 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
           </p>
         </div>
 
-        {/* Live Transcript Area */}
+        {/* Live Transcript */}
         <div className={`min-h-[100px] rounded-xl p-4 border-2 transition-colors ${
-          isRecording
-            ? 'bg-red-50/50 border-red-200'
-            : 'bg-gray-50 border-gray-100'
+          isRecording ? 'bg-red-50/50 border-red-200' : 'bg-gray-50 border-gray-100'
         }`}>
           {isRecording ? (
             <div className="space-y-1">
@@ -276,7 +347,7 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
           )}
         </div>
 
-        {/* Control Button — pulsing red when recording */}
+        {/* Record / Stop Button */}
         <button
           onClick={isRecording ? stopRecording : startRecording}
           className={`w-full py-3.5 px-6 rounded-2xl font-semibold text-white transition-all duration-200 tap-highlight-transparent active:scale-[0.98] transform flex items-center justify-center gap-2 text-sm ${
@@ -306,7 +377,7 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
             <FileText className="w-5 h-5 text-mint-500" />
             保存済みメモ
           </h3>
-          <span className="text-xs text-gray-400">{memos.length} 件</span>
+          <span className="text-xs text-gray-400">{memos.length}/{MAX_MEMOS} 件</span>
         </div>
 
         {memos.length === 0 ? (
@@ -315,37 +386,128 @@ export default function VoiceMemo({ onToast }: VoiceMemoProps) {
             <p className="text-sm text-gray-400">保存されたメモはありません</p>
           </div>
         ) : (
-          <div className="space-y-2.5 max-h-[400px] overflow-y-auto">
-            {memos.map((memo) => (
-              <div
-                key={memo.id}
-                className="bg-gray-50 border border-gray-100 rounded-xl p-3.5 space-y-2"
-              >
-                <p className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">
-                  {memo.text}
-                </p>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-gray-400">
-                    {formatDate(memo.createdAt)}
-                  </span>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => copyToClipboard(memo.text)}
-                      className="px-2.5 py-1 text-[11px] font-medium bg-sakura-50 text-sakura-600 hover:bg-sakura-100 rounded-lg transition-colors flex items-center gap-1"
-                    >
-                      <Copy className="w-3 h-3" />
-                      <span className="whitespace-nowrap">コピー</span>
-                    </button>
-                    <button
-                      onClick={() => deleteMemo(memo.id)}
-                      className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+          <div className="space-y-2 max-h-[450px] overflow-y-auto">
+            {memos.map((memo) => {
+              const pCfg = PRIORITY_CONFIG[memo.priority]
+              const isEditing = editingId === memo.id
+
+              return (
+                <div
+                  key={memo.id}
+                  className={`rounded-xl border border-gray-100 overflow-hidden flex ${pCfg.bg}`}
+                >
+                  {/* Left priority indicator */}
+                  <div className={`w-1 shrink-0 ${pCfg.color}`} />
+
+                  {/* Content */}
+                  <div className="flex-1 p-3 min-w-0 space-y-2">
+                    {/* Text / Edit area */}
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          rows={3}
+                          className="w-full text-sm text-gray-800 leading-relaxed p-2 border border-gray-200 rounded-lg focus:border-sakura-400 focus:ring-1 focus:ring-sakura-100 outline-none resize-none bg-white"
+                          autoFocus
+                        />
+                        <div className="flex gap-1.5 justify-end">
+                          <button
+                            onClick={cancelEdit}
+                            className="px-3 py-1 text-[11px] text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
+                            キャンセル
+                          </button>
+                          <button
+                            onClick={saveEdit}
+                            className="px-3 py-1 text-[11px] font-medium bg-mint-400 text-white hover:bg-mint-500 rounded-lg transition-colors flex items-center gap-1"
+                          >
+                            <Check className="w-3 h-3" />
+                            保存
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">
+                        {memo.text}
+                      </p>
+                    )}
+
+                    {/* Bottom row: timestamp + priority + actions */}
+                    {!isEditing && (
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[10px] text-gray-400 whitespace-nowrap tabular-nums">
+                            {memo.timestamp}
+                          </span>
+                          {/* Priority selector */}
+                          <div className="flex gap-0.5">
+                            <button
+                              onClick={() => updatePriority(memo.id, 'normal')}
+                              className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
+                                memo.priority === 'normal'
+                                  ? 'bg-gray-300 text-white'
+                                  : 'text-gray-300 hover:bg-gray-100'
+                              }`}
+                              title="通常"
+                            >
+                              <span className="text-[9px] font-bold">N</span>
+                            </button>
+                            <button
+                              onClick={() => updatePriority(memo.id, 'important')}
+                              className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
+                                memo.priority === 'important'
+                                  ? 'bg-amber-400 text-white'
+                                  : 'text-amber-300 hover:bg-amber-50'
+                              }`}
+                              title="重要"
+                            >
+                              <AlertTriangle className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => updatePriority(memo.id, 'urgent')}
+                              className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
+                                memo.priority === 'urgent'
+                                  ? 'bg-red-500 text-white'
+                                  : 'text-red-300 hover:bg-red-50'
+                              }`}
+                              title="至急"
+                            >
+                              <AlertCircle className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex gap-0.5 shrink-0">
+                          <button
+                            onClick={() => startEdit(memo)}
+                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                            title="編集"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => copyToClipboard(memo.text)}
+                            className="p-1.5 text-gray-400 hover:text-sakura-600 hover:bg-sakura-50 rounded-lg transition-colors"
+                            title="コピー"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => deleteMemo(memo.id)}
+                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            title="削除"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
